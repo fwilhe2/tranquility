@@ -7,7 +7,10 @@
 //! so the height function stays pure and the meshing jobs and the walker
 //! agree on every crater.
 
+mod heavens;
 mod rocks;
+
+use std::sync::Arc;
 
 use tranquility::prelude::*;
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
@@ -40,6 +43,8 @@ struct Crater {
     radius: f32,
     /// 1 fresh … 0.15 worn nearly flat. Most craters are old.
     fresh: f32,
+    /// Per-crater random bits, for its rays.
+    seed: u32,
 }
 
 fn crater_in(class: &Class, i: i32, j: i32) -> Option<Crater> {
@@ -59,6 +64,7 @@ fn crater_in(class: &Class, i: i32, j: i32) -> Option<Crater> {
         centre,
         radius: radius.min(span),
         fresh: 0.15 + 0.85 * bits(ha).powf(2.5),
+        seed: ha,
     })
 }
 
@@ -79,10 +85,11 @@ fn profile(x: f32, radius: f32, fresh: f32) -> f32 {
     }
 }
 
-struct Moon {
+pub struct Moon {
     regional: Fbm<Perlin>,
     rolling: Fbm<Perlin>,
     maria: Fbm<Perlin>,
+    mottle: Fbm<Perlin>,
 }
 
 impl Moon {
@@ -91,6 +98,7 @@ impl Moon {
             regional: Fbm::<Perlin>::new(3).set_octaves(4).set_frequency(1.0 / 9000.0),
             rolling: Fbm::<Perlin>::new(4).set_octaves(5).set_frequency(1.0 / 700.0),
             maria: Fbm::<Perlin>::new(5).set_octaves(3).set_frequency(1.0 / 14000.0),
+            mottle: Fbm::<Perlin>::new(6).set_octaves(4).set_frequency(1.0 / 400.0),
         }
     }
 
@@ -100,9 +108,11 @@ impl Moon {
         ((m + 0.05) / 0.2).clamp(0.0, 1.0)
     }
 
-    fn craters(&self, x: f32, z: f32, mare: f32) -> f32 {
+    /// Calls `visit` with every crater whose surroundings (out to `reach`
+    /// radii, at most 2.8) hold the point, and the point's distance from its
+    /// centre in radii.
+    fn each_crater(&self, x: f32, z: f32, mare: f32, reach: f32, mut visit: impl FnMut(&Crater, f32, Vec2)) {
         let p = Vec2::new(x, z);
-        let mut h = 0.0;
         for class in &CLASSES {
             let (ci, cj) = ((x / class.cell).floor() as i32, (z / class.cell).floor() as i32);
             for j in cj - 1..=cj + 1 {
@@ -112,14 +122,64 @@ impl Moon {
                     if class.cell > 500.0 && mare > 0.5 && c.fresh < 0.5 {
                         continue;
                     }
-                    let x = p.distance(c.centre) / c.radius;
-                    if x < 2.0 {
-                        h += profile(x, c.radius, c.fresh);
+                    let d = p - c.centre;
+                    let x = d.length() / c.radius;
+                    if x < reach {
+                        visit(&c, x, d);
                     }
                 }
             }
         }
+    }
+
+    fn craters(&self, x: f32, z: f32, mare: f32) -> f32 {
+        let mut h = 0.0;
+        self.each_crater(x, z, mare, 2.0, |c, x, _| h += profile(x, c.radius, c.fresh));
         h
+    }
+
+    /// How much brighter than its surroundings the soil is here: young
+    /// craters have thrown out fresh, unweathered material, as a bright
+    /// collar round the rim that breaks up into rays further out, and their
+    /// walls have not darkened yet.
+    fn ejecta(&self, x: f32, z: f32, mare: f32) -> f32 {
+        let mut bright = 0.0f32;
+        self.each_crater(x, z, mare, 2.8, |c, x, d| {
+            let young = ((c.fresh - 0.55) / 0.45).max(0.0);
+            if young == 0.0 {
+                return;
+            }
+            let b = if x < 1.0 {
+                0.25 + 0.75 * x * x
+            } else {
+                let out = 1.0 - (x - 1.0) / 1.8;
+                let angle = d.y.atan2(d.x);
+                let n = 5 + (c.seed >> 8) % 5;
+                let phase = bits(c.seed >> 3) * std::f32::consts::TAU;
+                let ray = (0.5 + 0.5 * (angle * n as f32 + phase).sin()).powi(3)
+                    + 0.5 * (0.5 + 0.5 * (angle * (2 * n + 3) as f32 - phase).sin()).powi(4);
+                // Solid at the rim, only the rays reaching far.
+                let collar = (1.0 - (x - 1.0) / 0.6).max(0.0);
+                out * out * (collar + (1.0 - collar) * ray.min(1.0))
+            };
+            bright = bright.max(young * b);
+        });
+        bright
+    }
+
+    /// 0–1: how strewn with blocks the ground is. Young craters dug theirs
+    /// out of the bedrock and dropped them on the rim and just beyond; old
+    /// ground has had its rocks ground to soil.
+    pub fn rockiness(&self, x: f32, z: f32) -> f32 {
+        let mut rocky = 0.035f32;
+        self.each_crater(x, z, self.mare(x, z), 2.4, |c, x, _| {
+            if c.radius < 2.5 || c.fresh < 0.4 {
+                return;
+            }
+            let near = if x < 1.0 { x * x * x } else { ((2.4 - x) / 1.4).powi(2) };
+            rocky = rocky.max((c.fresh - 0.4) / 0.6 * near);
+        });
+        rocky
     }
 }
 
@@ -155,22 +215,26 @@ impl Ground for Moon {
 
     fn tint(&self, x: f32, z: f32, _height: f32, normal: Vec3) -> LinearRgba {
         let mare = self.mare(x, z);
+        let (xd, zd) = (x as f64, z as f64);
         let albedo = 0.17 * (1.0 - mare) + 0.085 * mare;
+        // Patches of older and younger soil, hundreds of metres across.
+        let mottle = 1.0 + 0.12 * self.mottle.get([xd, zd]) as f32;
         // Steep slopes shed their weathered top and show brighter, fresher
-        // material.
+        // material; so does what young craters threw out.
         let slope = (1.0 - normal.y).clamp(0.0, 0.3) / 0.3;
         let grain = hash2(x * 0.7, z * 0.7) * 0.03 - 0.015;
-        let a = albedo * (1.0 + 0.5 * slope) + grain * albedo;
-        Pattern::Regolith.on(LinearRgba::rgb(a * 1.04, a, a * 0.95))
+        let a = albedo * mottle * (1.0 + 0.35 * slope + 0.55 * self.ejecta(x, z, mare)) + grain * albedo;
+        // Highland soil is faintly warm, mare basalt a little bluer.
+        Pattern::Regolith.on(LinearRgba::rgb(a * (1.05 - 0.03 * mare), a, a * (0.93 + 0.05 * mare)))
     }
 }
 
 fn main() {
-    let moon = Moon::new();
+    let moon = Arc::new(Moon::new());
     let (x, z) = moon.landing_site();
     let mut app = tranquility::app(WorldDef {
         name: "Moon".into(),
-        ground: ground(moon),
+        ground: moon.clone(),
         terrain: TerrainSettings {
             chunk_size: 256.0,
             view_radius: 16,
@@ -196,6 +260,8 @@ fn main() {
             jump: 2.2,
             walk: 1.2,
             run: 2.6,
+            // The ground is all small craters: let the eye glide over them.
+            eye_smoothing: 0.4,
             ..default()
         },
         // Looking north-west, the sun low on the right: relief shows best
@@ -207,6 +273,7 @@ fn main() {
             pitch: -0.12,
         },
     });
-    app.add_plugins(rocks::RocksPlugin);
+    app.insert_resource(rocks::Field(moon))
+        .add_plugins((rocks::RocksPlugin, heavens::HeavensPlugin));
     app.run();
 }

@@ -9,6 +9,7 @@ import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
+    mesh_view_bindings::lights,
 };
 
 // Integer hash of a lattice cell (pass whole-numbered coordinates) and a
@@ -82,6 +83,63 @@ fn setts(p: vec2<f32>) -> Stones {
     return Stones(f, joint, ihash(c, 4u));
 }
 
+// Small impact craters on a jittered grid, one per cell at most: the slope
+// of their bowls and raised rims, pointing downhill (`bend`), and how deep
+// in a bowl the point is (for a touch of darkening).
+struct Pits {
+    bend: vec2<f32>,
+    depth: f32,
+}
+
+fn pits(p: vec2<f32>, salt: u32) -> Pits {
+    let cell = floor(p);
+    var out = Pits(vec2(0.0), 0.0);
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let c = cell + vec2(f32(i), f32(j));
+            // Two hashes a cell, their bits shared out: this runs nine
+            // times a scale for every pixel of ground.
+            let h = ihash(c, salt);
+            if h > 0.45 {
+                continue;
+            }
+            let k = ihash(c, salt + 1u);
+            let centre = c + 0.15 + 0.7 * vec2(fract(h * 37.0), fract(k * 53.0));
+            // Many small, few large; most worn soft, some crisp.
+            let r = 0.06 + 0.34 * pow(k, 4.0);
+            let fresh = 0.15 + 0.85 * pow(fract(k * 211.0), 2.5);
+            let d = p - centre;
+            let x = length(d) / r;
+            if x >= 1.6 || x < 0.001 {
+                continue;
+            }
+            let dir = d / (x * r);
+            if x < 1.0 {
+                // The bowl: steeper toward the wall, level on the floor.
+                out.bend -= dir * 0.7 * fresh * x * x * (1.0 - smoothstep(0.85, 1.0, x));
+                out.depth += fresh * (1.0 - x * x);
+            }
+            // The rim's outer flank.
+            out.bend += dir * 0.3 * fresh * smoothstep(0.85, 1.0, x) * (1.0 - smoothstep(1.0, 1.6, x));
+        }
+    }
+    return out;
+}
+
+// How much brighter or darker than a matte (Lambertian) surface lunar soil
+// looks. Regolith is a porous powder: it scatters by Lommel-Seeliger's law
+// (no darkening toward grazing views), hides its own shadows when the sun is
+// behind the viewer (the opposition surge) and shows them when looking into
+// the sun.
+fn regolith_photometry(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>) -> f32 {
+    let nl = max(dot(n, l), 0.0);
+    let nv = max(dot(n, v), 0.0);
+    let g = acos(clamp(dot(v, l), -1.0, 1.0));
+    let seeliger = 2.0 / (nl + nv + 0.35);
+    let phase = 0.42 + 0.58 * exp(-1.7 * g) + 0.3 * exp(-g / 0.12);
+    return clamp(seeliger * phase * 0.62, 0.35, 2.0);
+}
+
 struct Detail {
     colour: vec3<f32>,
     bend: vec2<f32>,
@@ -123,6 +181,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     }
     let rest = max(1.0 - total, 0.0);
     colour += plain * rest;
+    if w[4] > 0.01 && lights.n_directional_lights > 0u {
+        let k = regolith_photometry(pbr_input.N, pbr_input.V, lights.directional_lights[0].direction_to_light);
+        colour *= mix(1.0, k, w[4]);
+    }
     roughness += base_roughness * rest;
 
     if any(bend != vec2(0.0)) {
@@ -180,15 +242,37 @@ fn detail(kind: i32, p: vec2<f32>, colour: vec3<f32>, roughness: f32, pixel: f32
         let patches = value_noise(p * 0.7);
         d.colour = colour * (0.8 + 0.4 * patches) * mix(1.0, 0.6 + 0.8 * blades, fade);
     } else {
-        // Regolith: pits and clods that catch a low sun, the coarser octave
-        // carrying further out than the fine one.
+        // Regolith: craterlets from a few metres down to a hand's breadth,
+        // over clods and grain; each scale fades out before it would alias,
+        // the coarse ones carrying furthest.
         let fade = 1.0 - smoothstep(0.01, 0.06, pixel);
         let far = 1.0 - smoothstep(0.04, 0.3, pixel);
+        let w_big = 1.0 - smoothstep(0.3, 1.5, pixel);
+        let w_mid = 1.0 - smoothstep(0.08, 0.4, pixel);
+        let w_small = 1.0 - smoothstep(0.02, 0.1, pixel);
+        var big = Pits(vec2(0.0), 0.0);
+        var mid = Pits(vec2(0.0), 0.0);
+        var small = Pits(vec2(0.0), 0.0);
+        if w_big > 0.0 {
+            big = pits(p / 3.7 + 17.0, 11u);
+        }
+        if w_mid > 0.0 {
+            mid = pits(p / 0.9 + 5.0, 21u);
+        }
+        if w_small > 0.0 {
+            small = pits(p / 0.23, 31u);
+        }
         let n0 = value_noise(p * 6.0);
         let n = vec2(n0 - value_noise(p * 6.0 + vec2(0.31, 0.0)), n0 - value_noise(p * 6.0 + vec2(0.0, 0.31)));
         let m0 = value_noise(p * 23.0);
         let m = vec2(m0 - value_noise(p * 23.0 + vec2(0.13, 0.0)), m0 - value_noise(p * 23.0 + vec2(0.0, 0.13)));
-        d.bend = n * 0.8 * far + m * 0.5 * fade;
+        d.bend = big.bend * w_big + mid.bend * w_mid + small.bend * 0.7 * w_small
+            + n * 0.22 * far + m * 0.3 * fade;
+        // Soil in a bowl lies a little darker; disturbed patches a little
+        // lighter, in drifts a few metres across.
+        let drift = value_noise(p * 0.21 + 40.0) * 0.6 + value_noise(p * 0.057) * 0.4;
+        d.colour = colour * (0.9 + 0.2 * drift)
+            * (1.0 - 0.05 * (big.depth * w_big + mid.depth * w_mid + small.depth * w_small));
     }
     return d;
 }

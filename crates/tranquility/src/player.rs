@@ -35,6 +35,8 @@ pub struct Player {
     /// Vertical speed while walking, m/s.
     fall: f32,
     grounded: bool,
+    /// Height of the feet; the eye follows it, eased if the world asks.
+    feet: f32,
 }
 
 fn spawn(mut commands: Commands, world: Res<WorldDef>, stars: Option<Res<Stars>>) {
@@ -47,6 +49,7 @@ fn spawn(mut commands: Commands, world: Res<WorldDef>, stars: Option<Res<Stars>>
         flying: false,
         fall: 0.0,
         grounded: true,
+        feet: floor,
     };
     // TRANQUILITY_POSE="x,y,z,yaw,pitch" starts there, flying.
     if let Some([x, y, z, yaw, pitch]) = crate::tools::env_floats::<5>("TRANQUILITY_POSE") {
@@ -161,6 +164,7 @@ fn walk(
         transform.translation += step;
         let floor = feet_floor(&world, transform.translation.x, transform.translation.z) + w.eye_height;
         transform.translation.y = transform.translation.y.max(floor);
+        player.feet = transform.translation.y - w.eye_height;
         return;
     }
 
@@ -178,7 +182,7 @@ fn walk(
     // Vertical: stick to the ground going down slopes and steps, fall off
     // anything higher than a step, jump from the ground.
     let floor = feet_floor(&world, next.x, next.y);
-    let mut feet = p.y - w.eye_height;
+    let mut feet = player.feet;
     if player.grounded && keys.just_pressed(KeyCode::Space) {
         player.fall = w.jump;
         player.grounded = false;
@@ -195,7 +199,19 @@ fn walk(
         player.fall = 0.0;
         player.grounded = true;
     }
-    transform.translation = Vec3::new(next.x, feet + w.eye_height, next.y);
+    player.feet = feet;
+
+    // The eye eases after the feet instead of copying every bump under them:
+    // a head on a body, not a wheel on the ground. Never far behind, so it
+    // cannot sink into a slope.
+    let target = feet + w.eye_height;
+    let eye = if w.eye_smoothing > 0.0 {
+        let eased = p.y + (target - p.y) * (1.0 - (-dt / w.eye_smoothing).exp());
+        eased.clamp(target - 0.5 * w.eye_height, target + 0.5 * w.eye_height)
+    } else {
+        target
+    };
+    transform.translation = Vec3::new(next.x, eye, next.y);
 }
 
 fn blocked(ground: &dyn Ground, p: Vec2, radius: f32) -> bool {

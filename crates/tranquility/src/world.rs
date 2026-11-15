@@ -160,6 +160,10 @@ pub struct WalkerSettings {
     /// Whether walking on the water surface is allowed (else you wade on the
     /// bed, if [`Ground::blocked`] lets you in at all).
     pub walk_on_water: bool,
+    /// Time constant, s, with which the eye follows the feet's height. 0
+    /// copies the ground exactly; a few tenths of a second glide over small
+    /// bumps, which is kinder to the stomach on rough ground.
+    pub eye_smoothing: f32,
 }
 
 impl Default for WalkerSettings {
@@ -174,6 +178,7 @@ impl Default for WalkerSettings {
             fly_fast: 600.0,
             radius: 0.3,
             walk_on_water: true,
+            eye_smoothing: 0.0,
         }
     }
 }

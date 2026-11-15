@@ -6,8 +6,13 @@ use tranquility::{prelude::*, terrain::ChunkMeshed};
 
 /// Rocks are added when a chunk reaches this resolution (quads per edge).
 const MIN_RESOLUTION: u32 = 128;
-const PER_CHUNK: u32 = 260;
-const SHAPES: usize = 6;
+/// Candidate spots per chunk; the moon's rockiness decides which hold a rock.
+const PER_CHUNK: u32 = 1400;
+const SHAPES: usize = 10;
+
+/// The moon, asked where the rocks lie.
+#[derive(Resource)]
+pub struct Field(pub std::sync::Arc<crate::Moon>);
 
 pub struct RocksPlugin;
 
@@ -42,19 +47,33 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     commands.insert_resource(Kit { shapes, materials });
 }
 
-/// A coarse icosphere with every vertex pushed in or out at random and the
-/// bottom cut flat: broken, faceted stones, no two shapes alike, each reused
-/// many times.
+/// A boulder: a sphere pushed about in broad lumps, then sliced by a few
+/// random planes (rocks break along flat faces), every vertex nudged and
+/// the bottom cut flat. No two shapes alike, each reused many times.
 fn lumpy(seed: u32) -> Mesh {
-    let mut mesh = Sphere::new(1.0).mesh().ico(1).expect("valid subdivision");
+    let s = seed as i32;
+    let dir = |k: i32, salt: u32| {
+        Vec3::new(unit(s, k, salt) - 0.5, unit(s, k, salt + 1) - 0.5, unit(s, k, salt + 2) - 0.5).normalize_or(Vec3::Y)
+    };
+    let lumps: Vec<(Vec3, f32)> = (0..4).map(|k| (dir(k, 20), 0.12 + 0.2 * unit(s, k, 23))).collect();
+    let cuts: Vec<(Vec3, f32)> = (0..7).map(|k| (dir(k, 30), 0.55 + 0.35 * unit(s, k, 33))).collect();
+    let mut mesh = Sphere::new(1.0).mesh().ico(2).expect("valid subdivision");
     if let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
         mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
     {
         for (k, p) in positions.iter_mut().enumerate() {
             let v = Vec3::from(*p);
-            let mut q = v * (0.7 + 0.45 * unit(seed as i32, k as i32, 9));
-            // A flattened top and a buried bottom, as on most real boulders.
-            q.y = q.y.clamp(-0.3, 0.75);
+            let swell: f32 = lumps.iter().map(|(d, a)| a * v.dot(*d)).sum();
+            let mut q = v * (0.95 + swell);
+            for (d, at) in &cuts {
+                let over = q.dot(*d) - at;
+                if over > 0.0 {
+                    q -= *d * over;
+                }
+            }
+            q *= 0.94 + 0.12 * unit(s, k as i32, 9);
+            // A buried bottom, as on most real boulders.
+            q.y = q.y.max(-0.3);
             *p = q.to_array();
         }
     }
@@ -68,6 +87,7 @@ fn scatter(
     mut meshed: MessageReader<ChunkMeshed>,
     world: Res<WorldDef>,
     kit: Res<Kit>,
+    field: Res<Field>,
     done: Query<(), With<Scattered>>,
 ) {
     for chunk in meshed.read() {
@@ -82,8 +102,13 @@ fn scatter(
             for k in 0..PER_CHUNK {
                 let local = Vec2::new(r(k, 1), r(k, 2)) * chunk.size;
                 let at = chunk.origin + local;
-                // Mostly pebbles, now and then a boulder.
-                let size = 0.15 * (25.0f32).powf(r(k, 3).powf(2.5));
+                let rocky = field.0.rockiness(at.x, at.y);
+                if r(k, 9) > rocky {
+                    continue;
+                }
+                // Mostly fist-sized stones, now and then a boulder; the big
+                // blocks lie where a crater dug them out.
+                let size = 0.1 * (12.0 + 28.0 * rocky).powf(r(k, 3).powf(2.5));
                 let y = world.ground.height(at.x, at.y);
                 let shape = (r(k, 4) * SHAPES as f32) as usize % SHAPES;
                 let material = (r(k, 5) * 3.0) as usize % 3;
