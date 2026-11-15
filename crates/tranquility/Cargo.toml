@@ -1,0 +1,18 @@
+[package]
+name = "tranquility"
+description = "A small first-person world engine on Bevy: streamed terrain, sky, walker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bevy.workspace = true
+earcut = "0.4.11"
+
+# The atmosphere is computed in compute shaders, which WebGL2 lacks, so the
+# browser build targets WebGPU.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy = { workspace = true, features = ["web", "webgpu"] }
+
+[lints]
+workspace = true
