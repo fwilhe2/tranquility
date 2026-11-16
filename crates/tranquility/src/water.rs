@@ -9,7 +9,7 @@ pub struct WaterPlugin;
 
 impl Plugin for WaterPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, follow);
+        app.add_systems(Update, (setup.run_if(resource_changed::<WorldDef>), follow).chain());
     }
 }
 
@@ -21,11 +21,15 @@ fn setup(
     world: Res<WorldDef>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    old: Query<Entity, With<Water>>,
 ) {
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
     let Some(water) = &world.water else {
         return;
     };
-    let extent = (world.terrain.view_radius as f32 + 1.0) * world.terrain.chunk_size;
+    let extent = world.terrain.reach() * 1.5;
     commands.spawn((
         Water,
         Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(extent)))),

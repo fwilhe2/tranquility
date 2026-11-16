@@ -11,8 +11,8 @@
 //!
 //! struct Flat;
 //! impl Ground for Flat {
-//!     fn height(&self, _: f32, _: f32) -> f32 { 0.0 }
-//!     fn tint(&self, _: f32, _: f32, _: f32, _: Vec3) -> LinearRgba { LinearRgba::gray(0.3) }
+//!     fn height(&self, _: f64, _: f64) -> f32 { 0.0 }
+//!     fn tint(&self, _: f64, _: f64, _: f32, _: Vec3) -> LinearRgba { LinearRgba::gray(0.3) }
 //! }
 //!
 //! fn main() {
@@ -33,6 +33,8 @@ pub mod facade;
 pub mod geom;
 pub mod ground;
 pub mod hud;
+pub mod noise;
+pub mod origin;
 pub mod player;
 pub mod quality;
 pub mod sky;
@@ -47,14 +49,15 @@ pub use world::WorldDef;
 
 pub mod prelude {
     pub use crate::{
-        ground::Pattern,
+        ground::{Pattern, PropMaterial},
+        origin::{Origin, OriginShifted},
         hud::Hud,
         player::Player,
         sky::Sun,
         terrain::{ChunkMeshed, ground, hash, hash2, unit},
         world::{
-            Air, Ground, SkySettings, Spawn, SunPath, TerrainSettings, WalkerSettings,
-            WaterSettings, WorldDef,
+            Air, AirDef, Ground, SkySettings, Soil, Spawn, SunPath, TerrainSettings,
+            WalkerSettings, WaterSettings, WorldDef,
         },
     };
     pub use bevy::prelude::*;
@@ -66,6 +69,7 @@ pub struct EnginePlugin(pub WorldDef);
 impl Plugin for EnginePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.0.clone()).add_plugins((
+            origin::OriginPlugin,
             terrain::TerrainPlugin,
             sky::SkyPlugin,
             water::WaterPlugin,
@@ -77,6 +81,13 @@ impl Plugin for EnginePlugin {
             quality::QualityPlugin,
         ));
     }
+}
+
+/// Run condition: the world has been replaced by another (not: has just
+/// been set up). An app changes worlds by inserting a new [`WorldDef`]; the
+/// engine's parts each start over from it.
+pub fn world_replaced(world: Res<WorldDef>) -> bool {
+    world.is_changed() && !world.is_added()
 }
 
 /// An app with Bevy's default plugins, a window (or, in the browser, the

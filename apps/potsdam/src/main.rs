@@ -23,14 +23,18 @@ fn main() {
     let world = WorldDef {
         name: format!("{} {}", city.name, city.year),
         ground: ground.clone(),
+        // A metre between vertices out to 250–500 m, where streets and
+        // squares are drawn; five levels reach 4 km.
         terrain: TerrainSettings {
-            chunk_size: 256.0,
-            view_radius: 16,
-            lods: vec![(1, 256), (3, 128), (7, 64), (i32::MAX, 32)],
+            chunk_size: 128.0,
+            resolution: 128,
+            levels: 5,
+            ring: 1,
             roughness: 0.95,
             reflectance: 0.3,
             // The town is flat: buildings cast, the ground only receives.
             casts_shadows: false,
+            ..default()
         },
         sky: SkySettings {
             sun: SunPath::Daily {
@@ -53,8 +57,8 @@ fn main() {
             ..default()
         },
         spawn: Spawn {
-            x: city.spawn.x,
-            z: city.spawn.z,
+            x: city.spawn.x as f64,
+            z: city.spawn.z as f64,
             yaw: city.spawn.yaw,
             pitch: 0.02,
         },

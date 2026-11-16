@@ -230,7 +230,8 @@ impl CityGround {
 }
 
 impl Ground for CityGround {
-    fn height(&self, x: f32, z: f32) -> f32 {
+    fn height(&self, x: f64, z: f64) -> f32 {
+        let (x, z) = (x as f32, z as f32);
         let land = self.land(x, z);
         let bed = self.water_level - BED;
         // The blurred mask is ½ on the shoreline: the bank drops from the
@@ -239,31 +240,37 @@ impl Ground for CityGround {
         land + (bed.min(land) - land) * t * t * (3.0 - 2.0 * t)
     }
 
-    fn tint(&self, x: f32, z: f32, height: f32, _normal: Vec3) -> LinearRgba {
+    fn tint(&self, x: f64, z: f64, height: f32, _normal: Vec3) -> LinearRgba {
+        let (xd, zd) = (x, z);
+        let (x, z) = (x as f32, z as f32);
         let mut cover = self.cover_at(x, z);
         // Wet bank and river bed.
         if height < self.water_level + 0.3 {
             cover = Cover::Water;
         }
         let c = cover.albedo();
-        let jitter = 1.0 + 0.16 * (hash2(x * 2.0, z * 2.0) - 0.5) + 0.1 * (hash2(x * 0.2, z * 0.2) - 0.5);
+        let jitter = 1.0 + 0.16 * (hash2(xd * 2.0, zd * 2.0) - 0.5) + 0.1 * (hash2(xd * 0.2, zd * 0.2) - 0.5);
         cover
             .pattern()
             .on(LinearRgba::from(Color::srgb(c[0] * jitter, c[1] * jitter, c[2] * jitter)))
     }
 
-    fn stand_height(&self, x: f32, z: f32) -> f32 {
+    fn stand_height(&self, x: f64, z: f64) -> f32 {
+        let (xd, zd) = (x, z);
+        let (x, z) = (x as f32, z as f32);
         if self.solid.get(x, z) == Some(DECK) {
-            self.land(x, z).max(self.height(x, z))
+            self.land(x, z).max(self.height(xd, zd))
         } else {
-            self.height(x, z)
+            self.height(xd, zd)
         }
     }
 
-    fn blocked(&self, x: f32, z: f32) -> bool {
+    fn blocked(&self, x: f64, z: f64) -> bool {
+        let (xd, zd) = (x, z);
+        let (x, z) = (x as f32, z as f32);
         match self.solid.get(x, z) {
             Some(cell) => cell == SOLID,
-            None => self.height(x, z) < self.water_level - 0.5,
+            None => self.height(xd, zd) < self.water_level - 0.5,
         }
     }
 }

@@ -4,6 +4,7 @@
 use bevy::prelude::*;
 
 use crate::{
+    origin::Origin,
     player::Player,
     quality::Quality,
     sky::Sun,
@@ -27,6 +28,9 @@ pub struct Hud {
     pub info: String,
     /// Extra keys the app handles, appended to the help line.
     pub keys: String,
+    /// Replaces WALK/FLY in the status line while the app has the player
+    /// doing something else (driving).
+    pub mode: String,
 }
 
 #[derive(Component)]
@@ -102,6 +106,7 @@ fn update(
     sun: Res<Sun>,
     world: Res<WorldDef>,
     hud: Res<Hud>,
+    origin: Res<Origin>,
     quality: Res<Quality>,
     player: Single<(&Player, &Transform)>,
     status: Single<(&mut Text, &mut Status), (Without<Info>, Without<Help>)>,
@@ -118,6 +123,7 @@ fn update(
     }
     let (player, transform) = player.into_inner();
     let p = transform.translation;
+    let at = origin.world(p);
     let sun_text = match world.sky.sun {
         SunPath::Daily { .. } => {
             let minutes = (sun.hours * 60.0) as u32;
@@ -130,10 +136,10 @@ fn update(
         world.name,
         status.fps,
         quality.name(),
-        p.x,
-        p.z,
+        at.x,
+        at.y,
         p.y,
-        if player.flying { "FLY" } else { "WALK" },
+        if !hud.mode.is_empty() { hud.mode.as_str() } else if player.flying { "FLY" } else { "WALK" },
         sun_text,
     );
     if hud.is_changed() || quality.is_changed() {

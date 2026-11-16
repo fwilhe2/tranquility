@@ -8,7 +8,7 @@ use bevy::{
     camera::Exposure,
     light::{
         Atmosphere, DirectionalLightShadowMap, Skybox, SunDisk,
-        atmosphere::ScatteringMedium, light_consts::lux,
+        atmosphere::ScatteringMedium,
     },
     prelude::*,
     render::render_resource::{
@@ -25,7 +25,17 @@ impl Plugin for SkyPlugin {
         app.init_resource::<DirectionalLightShadowMap>()
             .insert_resource(ClearColor(Color::BLACK))
             .add_systems(Startup, setup)
-            .add_systems(Update, (control_sun, place_sun, toggle_air).chain());
+            .add_systems(
+                Update,
+                (
+                    apply_world.run_if(resource_changed::<WorldDef>),
+                    dress_camera,
+                    control_sun,
+                    place_sun,
+                    toggle_air,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -52,55 +62,102 @@ impl Sun {
     }
 }
 
-#[derive(Resource)]
-struct AirMedium(Handle<ScatteringMedium>);
+/// The world's air, kept so `B` can take it away and give it back.
+#[derive(Resource, Default)]
+struct WorldAir(Option<Atmosphere>);
 
-fn setup(
-    mut commands: Commands,
-    world: Res<WorldDef>,
-    mut media: ResMut<Assets<ScatteringMedium>>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    let sky = &world.sky;
-    let start_hour = crate::tools::env_f32("TRANQUILITY_HOUR").unwrap_or(sky.start_hour);
-    let (elevation, azimuth) = match sky.sun {
-        SunPath::Daily { latitude, declination } => daily(latitude, declination, start_hour),
-        SunPath::Fixed { azimuth, elevation } => (
-            crate::tools::env_f32("TRANQUILITY_SUN").unwrap_or(elevation),
-            azimuth,
-        ),
-    };
-    commands.insert_resource(Sun {
-        hours: start_hour,
-        elevation,
-        azimuth,
-    });
-    commands.insert_resource(GlobalAmbientLight {
-        brightness: sky.ambient,
-        ..default()
-    });
-
-    let air = media.add(ScatteringMedium::earth(256, 256));
-    if sky.air == Air::Earth {
-        commands.spawn(Atmosphere::earth(air.clone()));
-    }
-    commands.insert_resource(AirMedium(air));
-
-    if sky.stars > 0.0 {
-        commands.insert_resource(Stars(images.add(star_field(1024, 7))));
-    }
-
+fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    commands.insert_resource(Sun { hours: 12.0, elevation: 45.0, azimuth: 180.0 });
+    commands.init_resource::<WorldAir>();
+    commands.insert_resource(Stars(images.add(star_field(1024, 7))));
     commands.spawn((
         DirectionalLight {
-            // Unscattered sunlight: the atmosphere, where there is one, does
-            // the dimming and reddening.
-            illuminance: lux::RAW_SUNLIGHT,
             shadow_maps_enabled: true,
             ..default()
         },
         // Shadow cascades are set by the quality tier.
         SunDisk::EARTH,
     ));
+}
+
+/// Sets the sky up for the world: at the start, and whenever the world is
+/// replaced by another.
+fn apply_world(
+    mut commands: Commands,
+    world: Res<WorldDef>,
+    mut sun: ResMut<Sun>,
+    mut air: ResMut<WorldAir>,
+    mut media: ResMut<Assets<ScatteringMedium>>,
+    atmospheres: Query<Entity, With<Atmosphere>>,
+    mut light: Single<(&mut DirectionalLight, &mut SunDisk)>,
+    mut started: Local<bool>,
+) {
+    let sky = &world.sky;
+    // The environment's hour and sun apply to the world the app starts in.
+    let env = |name| if *started { None } else { crate::tools::env_f32(name) };
+    let start_hour = env("TRANQUILITY_HOUR").unwrap_or(sky.start_hour);
+    let (elevation, azimuth) = match sky.sun {
+        SunPath::Daily { latitude, declination } => daily(latitude, declination, start_hour),
+        SunPath::Fixed { azimuth, elevation } => (env("TRANQUILITY_SUN").unwrap_or(elevation), azimuth),
+    };
+    *started = true;
+    *sun = Sun { hours: start_hour, elevation, azimuth };
+    commands.insert_resource(GlobalAmbientLight {
+        brightness: sky.ambient,
+        color: sky.ambient_color,
+        ..default()
+    });
+
+    for entity in &atmospheres {
+        commands.entity(entity).despawn();
+    }
+    air.0 = match &sky.air {
+        Air::None => None,
+        Air::Earth => Some(Atmosphere::earth(media.add(ScatteringMedium::earth(256, 256)))),
+        Air::Medium(def) => Some(Atmosphere {
+            inner_radius: def.radius,
+            outer_radius: def.radius + def.height,
+            ground_albedo: def.ground_albedo,
+            medium: media.add(def.medium.clone()),
+        }),
+    };
+    if let Some(atmosphere) = &air.0 {
+        commands.spawn(atmosphere.clone());
+    }
+
+    // Unscattered sunlight: the atmosphere, where there is one, does the
+    // dimming and reddening.
+    let (light, disk) = &mut *light;
+    light.illuminance = sky.sun_illuminance;
+    **disk = SunDisk {
+        angular_size: 2.0 * sky.sun_radius.to_radians(),
+        ..SunDisk::EARTH
+    };
+}
+
+/// Gives the camera the stars where the world shows them, and takes them
+/// away where it does not.
+fn dress_camera(
+    mut commands: Commands,
+    world: Res<WorldDef>,
+    stars: Res<Stars>,
+    new: Query<(), Added<Camera3d>>,
+    cameras: Query<Entity, With<Camera3d>>,
+) {
+    if !world.is_changed() && new.is_empty() {
+        return;
+    }
+    for camera in &cameras {
+        if world.sky.stars > 0.0 {
+            commands.entity(camera).insert(Skybox {
+                image: Some(stars.0.clone()),
+                brightness: world.sky.stars,
+                ..default()
+            });
+        } else {
+            commands.entity(camera).remove::<Skybox>();
+        }
+    }
 }
 
 /// The star field, handed to the camera as a skybox by the player module.
@@ -165,14 +222,16 @@ fn place_sun(
 fn toggle_air(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
-    air: Res<AirMedium>,
+    air: Res<WorldAir>,
     atmospheres: Query<Entity, With<Atmosphere>>,
 ) {
     if !keys.just_pressed(KeyCode::KeyB) {
         return;
     }
     if atmospheres.is_empty() {
-        commands.spawn(Atmosphere::earth(air.0.clone()));
+        if let Some(atmosphere) = &air.0 {
+            commands.spawn(atmosphere.clone());
+        }
     } else {
         for entity in &atmospheres {
             commands.entity(entity).despawn();
@@ -229,13 +288,4 @@ fn star_field(size: u32, seed: u32) -> Image {
         ..default()
     });
     image
-}
-
-/// Attaches the star field to new cameras.
-pub(crate) fn skybox(world: &WorldDef, stars: Option<&Stars>) -> Option<Skybox> {
-    stars.map(|stars| Skybox {
-        image: Some(stars.0.clone()),
-        brightness: world.sky.stars,
-        ..default()
-    })
 }

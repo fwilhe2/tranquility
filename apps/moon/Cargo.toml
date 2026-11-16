@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 tranquility.workspace = true
 bevy.workspace = true
-noise.workspace = true
 
 [lints]
 workspace = true

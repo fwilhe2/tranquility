@@ -1,103 +1,283 @@
-//! What hangs in the black sky: the Sun's disc, and the Earth, four times
-//! the size the Moon shows us and lit by the same Sun, so its phase is always
-//! the one the geometry gives. Both ride along with the camera, far beyond
-//! the terrain: they are directions, not places.
+//! What hangs in the sky: the Sun's disc, and the body's company — the
+//! Earth from the Moon, Jupiter from its moons, Mars filling a quarter of
+//! the sky from Phobos. All are lit by the same Sun as the ground, so each
+//! shows the phase the geometry gives. They ride along with the camera, far
+//! beyond the terrain: they are directions, not places.
+//!
+//! Angular sizes are the true ones, from the bodies' radii and distances.
 
 use bevy::{
     asset::RenderAssetUsages,
     light::{NotShadowCaster, NotShadowReceiver},
+    platform::collections::HashMap,
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
-use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
-use tranquility::prelude::*;
+use tranquility::{
+    noise::{fbm3, smoothstep},
+    prelude::*,
+};
+
+use crate::Current;
 
 /// Inside the camera's far plane, outside everything else.
-const DISTANCE: f32 = 30_000.0;
-/// Angular radii, degrees, as seen from the Moon.
-const SUN_RADIUS: f32 = 0.267;
-const EARTH_RADIUS: f32 = 0.95;
-/// Where the Earth hangs (it hardly moves in the lunar sky): degrees from
-/// north through east, and above the horizon.
-const EARTH_AZIMUTH: f32 = 322.0;
-const EARTH_ELEVATION: f32 = 21.0;
+const DISTANCE: f32 = 37_000.0;
+/// A disc smaller than this (degrees) would flicker between pixels: it is
+/// drawn this size and dimmed to the same total light.
+const SMALLEST: f32 = 0.11;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Map {
+    Earth,
+    Mars,
+    Jupiter,
+    Saturn,
+    Charon,
+    /// A small grey moon, too far for any face.
+    Rock,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Companion {
+    pub map: Map,
+    /// Angular radius, degrees.
+    pub radius: f32,
+    /// Degrees from north through east, and above the horizon.
+    pub azimuth: f32,
+    pub elevation: f32,
+    /// Which way its pole leans and which face it shows: ZYX angles.
+    pub turn: [f32; 3],
+    /// Rings, from and to, in the planet's radii.
+    pub rings: Option<(f32, f32)>,
+}
+
+impl Companion {
+    pub fn new(map: Map, radius: f32, azimuth: f32, elevation: f32) -> Self {
+        Self { map, radius, azimuth, elevation, turn: [0.35, 2.1, 0.2], rings: None }
+    }
+
+    fn direction(&self) -> Vec3 {
+        let (el, az) = (self.elevation.to_radians(), self.azimuth.to_radians());
+        Vec3::new(el.cos() * az.sin(), el.sin(), -el.cos() * az.cos())
+    }
+}
 
 pub struct HeavensPlugin;
 
 impl Plugin for HeavensPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, follow);
+        app.init_resource::<Maps>()
+            .add_systems(Startup, setup)
+            .add_systems(Update, populate.run_if(resource_changed::<Current>))
+            .add_systems(PostUpdate, follow.before(TransformSystems::Propagate));
     }
 }
 
 #[derive(Component)]
 struct SunDisc;
 
+/// A companion, and the direction it hangs in.
 #[derive(Component)]
-struct Earth;
+struct Hanging(Vec3);
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    let size = |degrees: f32| Vec3::splat(DISTANCE * degrees.to_radians().tan());
+/// Planet maps are painted once.
+#[derive(Resource, Default)]
+struct Maps(HashMap<Map, Handle<Image>>);
+
+#[derive(Resource)]
+struct Globe {
+    fine: Handle<Mesh>,
+    coarse: Handle<Mesh>,
+    sun: Handle<StandardMaterial>,
+}
+
+fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+    let globe = Globe {
+        fine: meshes.add(Sphere::new(1.0).mesh().uv(128, 64)),
+        coarse: meshes.add(Sphere::new(1.0).mesh().ico(3).expect("valid subdivision")),
+        sun: materials.add(StandardMaterial { base_color: Color::BLACK, ..default() }),
+    };
     commands.spawn((
         SunDisc,
-        Mesh3d(meshes.add(Sphere::new(1.0).mesh().ico(3).expect("valid subdivision"))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::BLACK,
-            // Far beyond white at any exposure: the bloom makes the glare.
-            emissive: LinearRgba::rgb(4.0e6, 3.8e6, 3.5e6),
-            ..default()
-        })),
-        Transform::from_scale(size(SUN_RADIUS)),
+        Mesh3d(globe.coarse.clone()),
+        MeshMaterial3d(globe.sun.clone()),
         NotShadowCaster,
         NotShadowReceiver,
     ));
-    commands.spawn((
-        Earth,
-        Mesh3d(meshes.add(Sphere::new(1.0).mesh().uv(96, 48))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(images.add(earth_map(1024, 512))),
-            perceptual_roughness: 0.85,
-            reflectance: 0.3,
-            ..default()
-        })),
-        // Tilted, the Atlantic-ish side toward us.
-        Transform::from_scale(size(EARTH_RADIUS)).with_rotation(Quat::from_euler(EulerRot::ZYX, 0.35, 2.1, 0.2)),
-        NotShadowCaster,
-        NotShadowReceiver,
-    ));
+    commands.insert_resource(globe);
+}
+
+fn size(degrees: f32) -> Vec3 {
+    Vec3::splat(DISTANCE * degrees.to_radians().tan())
+}
+
+/// Hangs the current body's sky: when the app starts and on every change
+/// of body.
+fn populate(
+    mut commands: Commands,
+    current: Res<Current>,
+    world: Res<WorldDef>,
+    globe: Res<Globe>,
+    mut maps: ResMut<Maps>,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    old: Query<Entity, With<Hanging>>,
+    mut disc: Single<(&mut Transform, &mut Visibility), With<SunDisc>>,
+) {
+    for entity in &old {
+        commands.entity(entity).despawn();
+    }
+    let body = &current.0;
+
+    // The Sun's surface is as bright from Pluto as from Mercury, only
+    // smaller: far beyond white at any exposure, and the bloom makes the
+    // glare. Under air the sky draws its own disc, dimmed by the air.
+    let true_radius = world.sky.sun_radius;
+    let drawn = true_radius.max(SMALLEST);
+    let dim = (true_radius / drawn).powi(2);
+    if let Some(mut material) = materials.get_mut(&globe.sun) {
+        material.emissive = LinearRgba::rgb(4.0e6, 3.8e6, 3.5e6) * dim;
+    }
+    disc.0.scale = size(drawn);
+    *disc.1 = if body.air.is_none() && body.sun_disc { Visibility::Inherited } else { Visibility::Hidden };
+
+    for c in &body.companions {
+        let rotation = Quat::from_euler(EulerRot::ZYX, c.turn[0], c.turn[1], c.turn[2]);
+        let drawn = c.radius.max(SMALLEST);
+        let dim = (c.radius / drawn).powi(2);
+        let material = match c.map {
+            Map::Rock => StandardMaterial {
+                base_color: Color::linear_rgb(0.09 * dim, 0.08 * dim, 0.07 * dim),
+                perceptual_roughness: 1.0,
+                reflectance: 0.0,
+                ..default()
+            },
+            map => {
+                let image = maps.0.entry(map).or_insert_with(|| images.add(paint(map))).clone();
+                StandardMaterial {
+                    base_color: Color::linear_rgb(dim, dim, dim),
+                    base_color_texture: Some(image),
+                    perceptual_roughness: 0.9,
+                    reflectance: 0.15,
+                    ..default()
+                }
+            }
+        };
+        let mut globe_entity = commands.spawn((
+            Hanging(c.direction()),
+            Mesh3d(if c.radius > 0.4 { globe.fine.clone() } else { globe.coarse.clone() }),
+            MeshMaterial3d(materials.add(material)),
+            Transform::from_scale(size(drawn)).with_rotation(rotation),
+            NotShadowCaster,
+            NotShadowReceiver,
+        ));
+        if let Some((inner, outer)) = c.rings {
+            let rings = meshes.add(annulus(inner, outer));
+            let texture = images.add(ring_profile());
+            globe_entity.with_child((
+                Mesh3d(rings),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color_texture: Some(texture),
+                    alpha_mode: AlphaMode::Blend,
+                    cull_mode: None,
+                    double_sided: true,
+                    perceptual_roughness: 1.0,
+                    reflectance: 0.0,
+                    // Ice grains scatter the light on through the rings:
+                    // they are lit from either side.
+                    diffuse_transmission: 0.6,
+                    ..default()
+                })),
+                NotShadowCaster,
+                NotShadowReceiver,
+            ));
+        }
+    }
 }
 
 fn follow(
     sun: Res<Sun>,
-    camera: Single<&Transform, (With<Camera3d>, Without<SunDisc>, Without<Earth>)>,
-    mut disc: Single<&mut Transform, (With<SunDisc>, Without<Earth>)>,
-    mut earth: Single<&mut Transform, (With<Earth>, Without<SunDisc>)>,
+    camera: Single<&Transform, (With<Camera3d>, Without<SunDisc>, Without<Hanging>)>,
+    mut disc: Single<&mut Transform, (With<SunDisc>, Without<Hanging>)>,
+    mut hanging: Query<(&mut Transform, &Hanging), Without<SunDisc>>,
 ) {
     disc.translation = camera.translation + sun.direction() * DISTANCE;
-    let (el, az) = (EARTH_ELEVATION.to_radians(), EARTH_AZIMUTH.to_radians());
-    earth.translation = camera.translation + Vec3::new(el.cos() * az.sin(), el.sin(), -el.cos() * az.cos()) * DISTANCE;
+    for (mut transform, direction) in &mut hanging {
+        transform.translation = camera.translation + direction.0 * DISTANCE;
+    }
 }
 
-/// An Earth-like globe as an equirectangular map: oceans, continents green
-/// to tan by latitude and dryness, polar ice, and weather over all of it.
-/// Not our Earth's coastlines, but the same blue marble.
-fn earth_map(width: u32, height: u32) -> Image {
-    let land = Fbm::<Perlin>::new(21).set_octaves(6).set_frequency(1.3);
-    let dry = Fbm::<Perlin>::new(22).set_octaves(4).set_frequency(2.2);
-    let weather = Fbm::<Perlin>::new(23).set_octaves(6).set_frequency(2.6);
-    let swirl = Fbm::<Perlin>::new(24).set_octaves(3).set_frequency(1.1);
-    let mix = |a: [f32; 3], b: [f32; 3], t: f32| {
-        let t = t.clamp(0.0, 1.0);
-        [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
-    };
-    let step = |a: f32, b: f32, x: f32| {
-        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
+/// A flat ring in the equatorial plane, radii in units of the globe's; the
+/// texture runs across it from the inner edge to the outer.
+fn annulus(inner: f32, outer: f32) -> Mesh {
+    let n = 160;
+    let (mut positions, mut normals, mut uvs, mut indices) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for k in 0..=n {
+        let a = k as f32 / n as f32 * std::f32::consts::TAU;
+        for (r, u) in [(inner, 0.0), (outer, 1.0)] {
+            positions.push([r * a.cos(), 0.0, r * a.sin()]);
+            normals.push([0.0, 1.0, 0.0]);
+            uvs.push([u, 0.5]);
+        }
+        if k < n {
+            let i = 2 * k as u32;
+            indices.extend_from_slice(&[i, i + 1, i + 2, i + 2, i + 1, i + 3]);
+        }
+    }
+    Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_indices(bevy::mesh::Indices::U32(indices))
+}
+
+/// Saturn's rings from 1.24 to 2.27 radii: the dusky C ring, the bright
+/// opaque B ring, the Cassini division, the A ring with the Encke gap.
+fn ring_profile() -> Image {
+    let width = 512;
+    let mut data = Vec::with_capacity(width * 4);
+    for i in 0..width {
+        let r = 1.24 + (2.27 - 1.24) * (i as f32 + 0.5) / width as f32;
+        let fine = 0.85 + 0.15 * (r * 310.0).sin() * (r * 97.0).cos();
+        let (tone, opacity) = if r < 1.53 {
+            (0.45, 0.12 + 0.1 * (r - 1.24) / 0.29)
+        } else if r < 1.95 {
+            (0.9, 0.85 + 0.12 * ((r - 1.53) / 0.42))
+        } else if r < 2.03 {
+            (0.5, 0.08)
+        } else if (r - 2.214).abs() < 0.004 {
+            (0.5, 0.02)
+        } else {
+            (0.8, 0.55)
+        };
+        let c = [0.86 * tone * fine, 0.78 * tone * fine, 0.62 * tone * fine];
+        data.extend(c.map(|v: f32| (v.powf(1.0 / 2.2) * 255.0).min(255.0) as u8));
+        data.push((opacity * fine * 255.0) as u8);
+    }
+    Image::new(
+        Extent3d { width: width as u32, height: 1, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
+type Rgb = [f32; 3];
+
+fn mix(a: Rgb, b: Rgb, t: f32) -> Rgb {
+    let t = t.clamp(0.0, 1.0);
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+}
+
+/// A globe as an equirectangular map of linear albedo, painted from noise
+/// on the sphere itself (so there is no seam and the poles do not pinch).
+/// Not the real coastlines or the real storms: the same kind of world.
+fn paint(map: Map) -> Image {
+    let (width, height) = match map {
+        Map::Mars | Map::Jupiter | Map::Saturn => (2048u32, 1024u32),
+        _ => (1024, 512),
     };
     let mut data = Vec::with_capacity((width * height * 4) as usize);
     for j in 0..height {
@@ -105,28 +285,15 @@ fn earth_map(width: u32, height: u32) -> Image {
         for i in 0..width {
             let lon = (i as f32 + 0.5) / width as f32 * std::f32::consts::TAU;
             let p = [(lat.cos() * lon.cos()) as f64, lat.sin() as f64, (lat.cos() * lon.sin()) as f64];
-            let h = land.get(p) as f32;
-            let d = dry.get(p) as f32;
-            let polar = lat.abs() / std::f32::consts::FRAC_PI_2;
-            // Linear albedo; the sea darkest, deeper further from shore.
-            let sea = mix([0.03, 0.09, 0.2], [0.012, 0.035, 0.11], -h * 4.0);
-            let green = mix([0.05, 0.11, 0.035], [0.1, 0.13, 0.05], d + 0.5);
-            let tan = [0.36, 0.27, 0.15];
-            // Deserts sit in the horse latitudes, forests at the equator
-            // and further poleward.
-            let arid = step(0.1, 0.5, 1.0 - (polar - 0.3).abs() * 4.0 + d * 1.5);
-            let ground = mix(green, tan, arid);
-            let mut c = mix(sea, ground, step(0.0, 0.03, h - 0.04));
-            let ice = step(0.78, 0.9, polar + 0.08 * d + 0.1 * h.max(0.0));
-            c = mix(c, [0.8, 0.83, 0.86], ice);
-            // Weather: fronts drawn out along the latitudes and stirred.
-            let s = swirl.get(p) * 0.5;
-            let q = [p[0] + s, p[1] * 2.2 - s, p[2] + s];
-            let cloud = step(-0.02, 0.45, weather.get(q) as f32 + 0.12 * polar);
-            c = mix(c, [0.82, 0.83, 0.85], cloud * 0.95);
-            // Air: a thin blue veil.
-            c = mix(c, [0.25, 0.4, 0.7], 0.12);
-            data.extend(c.map(|v| (v.powf(1.0 / 2.2) * 255.0).min(255.0) as u8));
+            let c = match map {
+                Map::Earth => earth(p, lat),
+                Map::Mars => mars(p, lat),
+                Map::Jupiter => jupiter(p, lat),
+                Map::Saturn => saturn(p, lat),
+                Map::Charon => charon(p, lat),
+                Map::Rock => [0.08; 3],
+            };
+            data.extend(c.map(|v| (v.max(0.0).powf(1.0 / 2.2) * 255.0).min(255.0) as u8));
             data.push(255);
         }
     }
@@ -137,4 +304,102 @@ fn earth_map(width: u32, height: u32) -> Image {
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::RENDER_WORLD,
     )
+}
+
+/// Oceans, continents green to tan by latitude and dryness, polar ice, and
+/// weather over all of it.
+fn earth(p: [f64; 3], lat: f32) -> Rgb {
+    let h = fbm3(p, 1.3, 6, 0.5, 21);
+    let d = fbm3(p, 2.2, 4, 0.5, 22);
+    let polar = lat.abs() / std::f32::consts::FRAC_PI_2;
+    // The sea darkest, deeper further from shore.
+    let sea = mix([0.03, 0.09, 0.2], [0.012, 0.035, 0.11], -h * 4.0);
+    let green = mix([0.05, 0.11, 0.035], [0.1, 0.13, 0.05], d + 0.5);
+    let tan = [0.36, 0.27, 0.15];
+    // Deserts sit in the horse latitudes, forests at the equator and
+    // further poleward.
+    let arid = smoothstep(0.1, 0.5, 1.0 - (polar - 0.3).abs() * 4.0 + d * 1.5);
+    let mut c = mix(sea, mix(green, tan, arid), smoothstep(0.0, 0.03, h - 0.04));
+    let ice = smoothstep(0.78, 0.9, polar + 0.08 * d + 0.1 * h.max(0.0));
+    c = mix(c, [0.8, 0.83, 0.86], ice);
+    // Weather: fronts drawn out along the latitudes and stirred.
+    let s = fbm3(p, 1.1, 3, 0.5, 24) as f64 * 0.5;
+    let q = [p[0] + s, p[1] * 2.2 - s, p[2] + s];
+    let cloud = smoothstep(-0.02, 0.45, fbm3(q, 2.6, 6, 0.5, 23) + 0.12 * polar);
+    c = mix(c, [0.82, 0.83, 0.85], cloud * 0.95);
+    // Air: a thin blue veil.
+    mix(c, [0.25, 0.4, 0.7], 0.12)
+}
+
+/// Bright dusty highlands, dark basalt regions scoured clean by wind, the
+/// polar caps, and a little dust haze over all.
+fn mars(p: [f64; 3], lat: f32) -> Rgb {
+    let broad = fbm3(p, 1.1, 5, 0.55, 31);
+    let fine = fbm3(p, 6.0, 5, 0.55, 32);
+    let polar = lat.abs() / std::f32::consts::FRAC_PI_2;
+    let bright = mix([0.42, 0.21, 0.09], [0.55, 0.33, 0.17], fine * 1.5 + 0.5);
+    let dark = mix([0.11, 0.065, 0.045], [0.2, 0.11, 0.06], fine + 0.5);
+    // The dark markings keep to the low and middle latitudes.
+    let basalt = smoothstep(0.02, 0.2, broad + 0.25 * fine - 0.25 * (polar - 0.25).abs());
+    let mut c = mix(bright, dark, basalt);
+    // The giant canyon: a dark gash along the equator on one side.
+    let lon = (p[2].atan2(p[0])) as f32;
+    let rift = (1.0 - ((lat + 0.15 + 0.06 * (lon * 3.0).sin()) / 0.035).abs()).max(0.0) * smoothstep(0.3, 0.8, lon) * (1.0 - smoothstep(1.6, 2.1, lon));
+    c = mix(c, [0.12, 0.06, 0.04], rift * 0.8);
+    let cap = smoothstep(0.84, 0.9, polar + 0.03 * fine + if lat > 0.0 { 0.0 } else { -0.03 });
+    c = mix(c, [0.82, 0.78, 0.74], cap);
+    mix(c, [0.5, 0.33, 0.2], 0.1)
+}
+
+/// Bands by latitude — pale zones of high ammonia cloud, brown belts where
+/// you see deeper — sheared against each other into festoons, with a
+/// great red oval in the south.
+fn jupiter(p: [f64; 3], lat: f32) -> Rgb {
+    let lon = (p[2].atan2(p[0])) as f32;
+    // Turbulence stretched along the latitudes.
+    let q = [p[0] * 3.0, p[1] * 16.0, p[2] * 3.0];
+    let swirl = fbm3(q, 1.0, 5, 0.55, 41);
+    let wisps = fbm3([p[0] * 9.0, p[1] * 40.0, p[2] * 9.0], 1.0, 4, 0.6, 42);
+    let l = lat + 0.035 * swirl + 0.012 * wisps;
+    // The belts: a sum of a few waves in latitude, never quite regular.
+    let band = (l * 13.0).sin() * 0.55 + (l * 27.0 + 1.0).sin() * 0.25 + (l * 5.0 + 0.4).sin() * 0.35;
+    let zone = [0.74, 0.68, 0.58];
+    let belt = [0.44, 0.27, 0.16];
+    let mut c = mix(belt, zone, band * 0.9 + 0.5 + 0.25 * wisps);
+    // Blue-grey festoons on the edges of the equatorial zone.
+    let edge = (1.0 - (band.abs() / 0.15)).max(0.0) * smoothstep(0.1, 0.5, swirl);
+    c = mix(c, [0.4, 0.42, 0.46], edge * 0.35);
+    // The poles: darker, mottled, bluer.
+    let polar = smoothstep(0.95, 1.35, lat.abs() + 0.1 * swirl);
+    c = mix(c, [0.33, 0.31, 0.3], polar * 0.8);
+    // The Great Red Spot, 22° south.
+    let (dx, dy) = (((lon - 1.2 + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI) / 0.2, (lat + 0.38) / 0.095);
+    let spot = (1.0 - (dx * dx + dy * dy)).max(0.0);
+    c = mix(c, [0.58, 0.24, 0.13], smoothstep(0.0, 0.5, spot) * 0.85);
+    c
+}
+
+/// Jupiter's bands under a thick butterscotch haze, which mutes them, and
+/// the shadow of the rings across the equator.
+fn saturn(p: [f64; 3], lat: f32) -> Rgb {
+    let swirl = fbm3([p[0] * 3.0, p[1] * 18.0, p[2] * 3.0], 1.0, 4, 0.5, 51);
+    let l = lat + 0.02 * swirl;
+    let band = (l * 17.0).sin() * 0.5 + (l * 37.0).sin() * 0.2 + (l * 7.0 + 0.3).sin() * 0.3;
+    let mut c = mix([0.6, 0.47, 0.3], [0.76, 0.66, 0.46], band * 0.5 + 0.5);
+    let polar = smoothstep(1.0, 1.4, lat.abs());
+    c = mix(c, [0.42, 0.42, 0.38], polar * 0.6);
+    // The rings' shadow: a few dark lines just off the equator.
+    let shade = smoothstep(0.015, 0.03, lat) * (1.0 - smoothstep(0.09, 0.11, lat)) * (0.6 + 0.4 * (lat * 400.0).sin());
+    mix(c, [0.1, 0.08, 0.05], shade * 0.7)
+}
+
+/// Grey water ice, cratered, with the dark red cap at its north pole.
+fn charon(p: [f64; 3], lat: f32) -> Rgb {
+    let n = fbm3(p, 2.5, 6, 0.55, 61);
+    let mut c = mix([0.3, 0.29, 0.28], [0.45, 0.44, 0.43], n + 0.5);
+    let cap = smoothstep(0.95, 1.25, lat + 0.15 * n);
+    c = mix(c, [0.2, 0.1, 0.07], cap * 0.85);
+    // The belt of chasms round the equator.
+    let chasm = (1.0 - ((lat - 0.1 + 0.08 * n) / 0.03).abs()).max(0.0);
+    mix(c, [0.2, 0.2, 0.2], chasm * 0.5)
 }

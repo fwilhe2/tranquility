@@ -26,9 +26,9 @@ impl Island {
 
     /// The first spot of dry, gently sloping ground on a spiral out from the
     /// origin, so the walk doesn't start in the sea.
-    fn landfall(&self) -> (f32, f32) {
+    fn landfall(&self) -> (f64, f64) {
         for k in 0..4000 {
-            let (angle, radius) = (k as f32 * 2.4, 20.0 * (k as f32).sqrt());
+            let (angle, radius) = (k as f64 * 2.4, 20.0 * (k as f64).sqrt());
             let (x, z) = (radius * angle.cos(), radius * angle.sin());
             let h = self.height(x, z);
             let slope = (self.height(x + 5.0, z) - h).abs().max((self.height(x, z + 5.0) - h).abs());
@@ -46,8 +46,7 @@ fn smoothstep(a: f64, b: f64, x: f64) -> f64 {
 }
 
 impl Ground for Island {
-    fn height(&self, x: f32, z: f32) -> f32 {
-        let (x, z) = (x as f64, z as f64);
+    fn height(&self, x: f64, z: f64) -> f32 {
         // Domain warping bends the ridgelines so they don't run in
         // grid-aligned streaks.
         let wx = x + 700.0 * self.warp.get([x, z]);
@@ -64,7 +63,7 @@ impl Ground for Island {
 
     /// Sand by the water, grass on gentle slopes, rock on steep ones, snow on
     /// high flat ground.
-    fn tint(&self, x: f32, z: f32, height: f32, normal: Vec3) -> LinearRgba {
+    fn tint(&self, x: f64, z: f64, height: f32, normal: Vec3) -> LinearRgba {
         let flat = normal.y;
         let jitter = hash2(x * 0.37, z * 0.37) * 0.12 - 0.06;
         let srgb = |r: f32, g: f32, b: f32| LinearRgba::from(Color::srgb(r, g, b));
