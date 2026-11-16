@@ -51,7 +51,8 @@ cached, so a run takes about five minutes.
 Click to capture the mouse, **Esc** to let it go. **WASD** walk, **Shift**
 faster, **Space** jump, **F** fly (**Space**/**C** up and down), **[ ]** sun
 (time of day, or elevation for a fixed sun), **B** air on/off, **Q** quality
-tier, **M** sound, **H** hide text.
+tier, **M** sound, **H** hide text, **F11** full screen
+(`TRANQUILITY_SIZE=1920x1080` sets the window's size, for recording).
 
 In `moon`: **1**–**9** change body (`make run APP=moon` starts on the Moon;
 `TRANQUILITY_BODY=mars` or a first argument picks another), **R** climbs

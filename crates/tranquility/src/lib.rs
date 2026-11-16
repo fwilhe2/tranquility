@@ -46,7 +46,10 @@ pub mod vehicle;
 pub mod water;
 pub mod world;
 
-use bevy::{prelude::*, window::PresentMode};
+use bevy::{
+    prelude::*,
+    window::{MonitorSelection, PresentMode, WindowMode, WindowResolution},
+};
 
 pub use world::WorldDef;
 
@@ -109,12 +112,28 @@ pub fn app(world: WorldDef) -> App {
             } else {
                 PresentMode::AutoVsync
             },
+            // TRANQUILITY_SIZE=1920x1080 for recording at a size.
+            resolution: std::env::var("TRANQUILITY_SIZE")
+                .ok()
+                .and_then(|s| s.split_once('x').and_then(|(w, h)| Some(WindowResolution::new(w.parse().ok()?, h.parse().ok()?))))
+                .unwrap_or_default(),
             canvas: Some("#bevy".into()),
             fit_canvas_to_parent: true,
             ..default()
         }),
         ..default()
     }))
-    .add_plugins(EnginePlugin(world));
+    .add_plugins(EnginePlugin(world))
+    .add_systems(Update, full_screen);
     app
+}
+
+/// F11: the whole screen and no frame, and back.
+fn full_screen(keys: Res<ButtonInput<KeyCode>>, mut window: Single<&mut Window>) {
+    if keys.just_pressed(KeyCode::F11) {
+        window.mode = match window.mode {
+            WindowMode::Windowed => WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+            _ => WindowMode::Windowed,
+        };
+    }
 }

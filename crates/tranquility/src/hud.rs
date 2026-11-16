@@ -167,7 +167,7 @@ fn update(
         }
         let keys = format!(
             "click: capture mouse   WASD: walk   Shift: faster   Space: jump   F: fly (Space/C up/down)\n\
-             [ ]: sun   B: air on/off   Q: quality   M: sound   H: hide text   Esc: release mouse{}",
+             [ ]: sun   B: air on/off   Q: quality   M: sound   H: hide text   F11: full screen   Esc: release mouse{}",
             if hud.keys.is_empty() { String::new() } else { format!("   {}", hud.keys) }
         );
         if help.0 != keys {
