@@ -58,6 +58,7 @@ impl Plugin for RoverPlugin {
                     (pose_wheels, ride, throw_dust, lay_tracks).chain().after(Drive),
                     (fly_dust, draw_dust).chain().after(Drive),
                     stand_clear.after(Walking),
+                    kick.after(crate::gait::Striding).before(fly_dust),
                 ),
             );
     }
@@ -702,6 +703,50 @@ fn throw_dust(time: Res<Time>, rover: Option<Single<(&mut Vehicle, &Transform), 
             let across = (dust.random() - 0.5) * 0.22;
             let v = forward * k * (1.0 - phi.cos()) + Vec3::Y * k * phi.sin() + right * (dust.random() - 0.5) * 0.35 * k;
             throw(&mut dust, patch - forward * back + right * across + Vec3::Y * WHEEL_R * (1.0 - phi.cos()), v, patch.y);
+        }
+    }
+}
+
+/// Boots throw soil too. As the foot comes down the other leaves the
+/// ground behind it and its toe flicks a little spray forward, a cupful
+/// at a walk, more at a lope; landing from a jump splashes a ring.
+fn kick(
+    mut falls: MessageReader<crate::gait::Footfall>,
+    current: Res<Current>,
+    player: Single<&Player>,
+    dust: Single<(&mut Dust, &Transform)>,
+) {
+    let (mut dust, frame) = dust.into_inner();
+    let pace = Vec2::new(player.velocity.x, player.velocity.z).length();
+    // Wet sand on Titan's shore stays put.
+    let loose = current.0.soil.craterlets.max(current.0.soil.ripples).max(0.3);
+    for fall in falls.read() {
+        let heading = Quat::from_rotation_y(fall.heading);
+        let (forward, right) = (heading * Vec3::NEG_Z, heading * Vec3::X);
+        let side = if fall.left { 0.13 } else { -0.13 };
+        let toe = fall.at - forward * 0.2 + right * side + Vec3::Y * 0.02;
+        let throw = |dust: &mut Dust, at: Vec3, velocity: Vec3| {
+            if dust.grains.len() < MOST_GRAINS {
+                let size = 0.008 + 0.02 * dust.random().powi(2);
+                dust.grains.push(Grain { at: local(frame, at), velocity, age: 0.0, size, floor: fall.at.y });
+            }
+        };
+        if pace > 0.15 {
+            for _ in 0..(loose * 120.0 * fall.strength) as usize {
+                let k = pace * (0.35 + 0.75 * dust.random());
+                let up = 0.25 + 0.55 * dust.random();
+                let v = forward * k + Vec3::Y * k * up + right * (dust.random() - 0.5) * 0.5 * k;
+                let at = toe + right * (dust.random() - 0.5) * 0.1;
+                throw(&mut dust, at, v);
+            }
+        }
+        if fall.strength > 0.6 {
+            for _ in 0..(loose * 60.0 * fall.strength) as usize {
+                let a = dust.random() * std::f32::consts::TAU;
+                let out = Vec3::new(a.cos(), 0.0, a.sin());
+                let v = out * (0.3 + 0.6 * dust.random()) * fall.strength + Vec3::Y * (0.2 + 0.4 * dust.random()) * fall.strength;
+                throw(&mut dust, fall.at + out * 0.2 + Vec3::Y * 0.02, v);
+            }
         }
     }
 }
