@@ -89,14 +89,23 @@ struct Globe {
     fine: Handle<Mesh>,
     coarse: Handle<Mesh>,
     sun: Handle<StandardMaterial>,
+    /// What keeps the fill light off the companions (see `populate`).
+    dark: Handle<Image>,
 }
 
-fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>, mut images: ResMut<Assets<Image>>) {
     let globe = Globe {
         // Bevy's UV sphere has its poles on z; the maps want them on y.
         fine: meshes.add(Sphere::new(1.0).mesh().uv(128, 64).rotated_by(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))),
         coarse: meshes.add(Sphere::new(1.0).mesh().ico(3).expect("valid subdivision")),
         sun: materials.add(StandardMaterial { base_color: Color::BLACK, ..default() }),
+        dark: images.add(Image::new(
+            Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            TextureDimension::D2,
+            vec![0, 0, 0, 255],
+            TextureFormat::Rgba8Unorm,
+            RenderAssetUsages::RENDER_WORLD,
+        )),
     };
     commands.spawn((
         SunDisc,
@@ -155,11 +164,17 @@ fn populate(
         }
         let drawn = c.radius.max(SMALLEST);
         let dim = (c.radius / drawn).powi(2);
+        // The fill light stands for what the ground round you throws into
+        // its own shadows; none of it reaches a planet's night side. An
+        // occlusion map of black takes it off (occlusion only dims the
+        // ambient light).
+        let shut = Some(globe.dark.clone());
         let material = match c.map {
             Map::Rock => StandardMaterial {
                 base_color: Color::linear_rgb(0.09 * dim, 0.08 * dim, 0.07 * dim),
                 perceptual_roughness: 1.0,
                 reflectance: 0.0,
+                occlusion_texture: shut,
                 ..default()
             },
             map => {
@@ -169,6 +184,7 @@ fn populate(
                     base_color_texture: Some(image),
                     perceptual_roughness: 0.9,
                     reflectance: 0.15,
+                    occlusion_texture: shut,
                     ..default()
                 }
             }
