@@ -30,7 +30,7 @@ use body::Body;
 pub struct Current(pub Body);
 
 #[derive(Resource)]
-struct Catalogue(Vec<Body>);
+pub struct Catalogue(pub Vec<Body>);
 
 const KEYS: [KeyCode; 9] = [
     KeyCode::Digit1,
@@ -117,5 +117,5 @@ fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>,
         b.note,
     );
     let names: Vec<String> = bodies.0.iter().enumerate().map(|(k, b)| format!("{} {}", k + 1, b.name)).collect();
-    hud.keys = format!("0: stroll (it walks, you watch){}\n{}", if b.rover { "   R: drive the rover" } else { "" }, names.join("  "));
+    hud.keys = format!("0: stroll (it walks, you watch; T tours the bodies){}\n{}", if b.rover { "   R: drive the rover" } else { "" }, names.join("  "));
 }

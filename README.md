@@ -86,6 +86,9 @@ endless walk on any of the nine bodies.
   you, legs swinging.
 - The text goes; the picture comes up out of black and the body's name
   fades in and out.
+- **T** tours the bodies (or start with `MOON_STROLL=tour`): four
+  minutes on each, out to black, and on to the next, from Mercury to
+  Pluto and round again. `MOON_STAY=seconds` changes the stay.
 
 ## Sound
 

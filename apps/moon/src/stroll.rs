@@ -25,12 +25,15 @@
 //!   a couple of metres up, as slowly.
 //!
 //! The text goes; a caption names the body and fades.
+//!
+//! `T` (or `MOON_STROLL=tour`) tours the bodies: a few minutes on each,
+//! out to black, and on to the next.
 
 use bevy::{math::DVec2, post_process::effect_stack::Vignette};
 use tranquility::{prelude::*, terrain::Chunks};
 
 use crate::{
-    Current,
+    Catalogue, Current,
     body::Body,
     heavens::{Companion, Map},
     rover::Rover,
@@ -44,6 +47,12 @@ const AHEAD: [(f32, f32); 8] = [(1.5, 1.0), (3.0, 1.0), (5.0, 0.8), (8.0, 0.6), 
 const BEARINGS: i32 = 15;
 /// The feet's bearing turns no faster than this, rad/s.
 const TURN: f32 = 0.16;
+/// Seconds on each body when touring, and the fade out at the end.
+/// (`MOON_STAY=seconds` for another stay.)
+fn stay() -> f32 {
+    std::env::var("MOON_STAY").ok().and_then(|v| v.parse().ok()).unwrap_or(240.0)
+}
+const FADE: f32 = 3.0;
 /// Floating on jets: height of the feet above the ground, m, and pace, m/s.
 const FLOAT: f32 = 1.8;
 const DRIFT: f32 = 0.4;
@@ -54,7 +63,7 @@ impl Plugin for StrollPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Stroll>()
             .add_systems(PostStartup, setup)
-            .add_systems(Update, ((switch, guide, lens).chain().after(Walking), creep, caption));
+            .add_systems(Update, ((switch, guide, lens).chain().after(Walking), creep, tour, caption));
     }
 }
 
@@ -83,6 +92,8 @@ pub struct Stroll {
     pending: bool,
     /// Where the land stands highest, on a body with nothing in the sky.
     skyline: Option<f32>,
+    /// Moving on to the next body every few minutes.
+    pub touring: bool,
 }
 
 impl Default for Stroll {
@@ -101,6 +112,7 @@ impl Default for Stroll {
             arrived: None,
             pending: std::env::var_os("MOON_STROLL").is_some(),
             skyline: None,
+            touring: std::env::var("MOON_STROLL").is_ok_and(|v| v == "tour"),
         }
     }
 }
@@ -192,6 +204,7 @@ fn switch(
             was_hidden: hud.hidden,
             arrived: if stroll.pending { None } else { Some(1e3) },
             pending: false,
+            touring: stroll.touring,
             ..default()
         };
         player.flying = false;
@@ -353,6 +366,27 @@ fn creep(time: Res<Time>, current: Res<Current>, mut stroll: ResMut<Stroll>, mut
     sun.elevation += if stroll.sun_up { 0.008 } else { -0.008 } * time.delta_secs();
 }
 
+/// `T`: touring or not. When the time on a body is up, the picture goes to
+/// black and the next body comes up out of it.
+fn tour(
+    mut commands: Commands,
+    keys: Res<ButtonInput<KeyCode>>,
+    bodies: Res<Catalogue>,
+    mut current: ResMut<Current>,
+    mut stroll: ResMut<Stroll>,
+) {
+    if keys.just_pressed(KeyCode::KeyT) && stroll.on {
+        stroll.touring = !stroll.touring;
+    }
+    if !stroll.on || !stroll.touring || stroll.arrived.is_none_or(|since| since < stay()) {
+        return;
+    }
+    let here = bodies.0.iter().position(|b| b.name == current.0.name).unwrap_or(0);
+    let next = bodies.0[(here + 1) % bodies.0.len()].clone();
+    commands.insert_resource(next.world());
+    current.0 = next;
+}
+
 /// The black the picture comes out of on arriving somewhere.
 #[derive(Component)]
 struct Veil;
@@ -405,7 +439,8 @@ fn caption(
     // Black until the ground is there, then three seconds out of it; the
     // caption comes after and stays ten seconds.
     let since = stroll.arrived;
-    let dark = if !stroll.on { 0.0 } else { since.map_or(1.0, |t| 1.0 - (t / 3.0).clamp(0.0, 1.0)) };
+    let leaving = |t: f32| if stroll.touring { ((t - (stay() - FADE)) / FADE).clamp(0.0, 1.0) } else { 0.0 };
+    let dark = if !stroll.on { 0.0 } else { since.map_or(1.0, |t| (1.0 - (t / 3.0).clamp(0.0, 1.0)).max(leaving(t))) };
     let shown = if !stroll.on { 0.0 } else { since.map_or(0.0, |t| ((t - 2.5) / 2.5).clamp(0.0, 1.0) * ((15.0 - t) / 3.0).clamp(0.0, 1.0)) };
     let (color, visibility) = &mut *veil;
     let want = if dark > 0.0 { Visibility::Inherited } else { Visibility::Hidden };
