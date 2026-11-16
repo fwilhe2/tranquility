@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use tranquility::prelude::*;
 
-use crate::{heavens::Companion, suit};
+use crate::{heavens::Companion, rocks::Strewn, suit};
 
 /// A body's ground, and where its loose rocks lie.
 pub trait Land: Ground {
@@ -85,6 +85,10 @@ pub struct Body {
     pub air: Air,
     /// Quadratic drag of the air on a suited walker, 1/m.
     pub drag: f32,
+    /// Density of the air at the ground, kg/m³, and a usual wind, m/s:
+    /// what carries sound from outside to a helmet, and what blows on it.
+    pub air_density: f32,
+    pub wind: f32,
     /// Where the sun stands: degrees from north through east, and up.
     pub sun: (f32, f32),
     /// Stars' brightness; 0 under a sky that hides them.
@@ -129,6 +133,8 @@ impl Body {
             reflectance: 0.2,
             air: Air::None,
             drag: 0.0,
+            air_density: 0.0,
+            wind: 0.0,
             sun: (100.0, 14.0),
             stars: 900.0,
             fill: 1.0,
@@ -168,7 +174,8 @@ impl Body {
         let exposure = 12.6 + (sunlight / SUN_LUX * self.albedo / 0.11).log2() + self.exposure_bias;
         // Lambertian ground of that albedo, seen from its own shadow.
         let ambient = self.fill * sunlight * self.albedo * (3000.0 / (SUN_LUX * 0.11));
-        let ground: Arc<dyn Ground> = self.land.clone();
+        // The walker meets the land with its rocks on it.
+        let ground: Arc<dyn Ground> = Arc::new(Strewn { land: self.land.clone(), rocks: self.rocks.clone(), sea: self.sea.as_ref().map(|sea| sea.level) });
         WorldDef {
             name: self.name.into(),
             ground,

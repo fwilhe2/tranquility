@@ -64,8 +64,8 @@ impl Plugin for RoverPlugin {
 
 /// Whether you are at the wheel, and which camera.
 #[derive(Resource, Default)]
-struct Driving {
-    aboard: bool,
+pub struct Driving {
+    pub aboard: bool,
     chase: bool,
     /// The chase camera's place, eased.
     behind: Option<Vec3>,
@@ -73,7 +73,7 @@ struct Driving {
 }
 
 #[derive(Component)]
-struct Rover;
+pub struct Rover;
 
 /// A wheel's knuckle (steers and rides the suspension) and its spinning
 /// part, by index into the vehicle's wheels.

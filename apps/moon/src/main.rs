@@ -11,10 +11,14 @@
 mod bodies;
 mod body;
 mod craters;
+mod figure;
+mod gait;
 mod heavens;
 mod prints;
 mod rocks;
 mod rover;
+mod sound;
+mod stroll;
 mod suit;
 
 use tranquility::prelude::*;
@@ -28,7 +32,7 @@ pub struct Current(pub Body);
 #[derive(Resource)]
 struct Catalogue(Vec<Body>);
 
-const KEYS: [KeyCode; 10] = [
+const KEYS: [KeyCode; 9] = [
     KeyCode::Digit1,
     KeyCode::Digit2,
     KeyCode::Digit3,
@@ -38,7 +42,6 @@ const KEYS: [KeyCode; 10] = [
     KeyCode::Digit7,
     KeyCode::Digit8,
     KeyCode::Digit9,
-    KeyCode::Digit0,
 ];
 
 fn main() {
@@ -49,11 +52,18 @@ fn main() {
         .or_else(|| bodies.iter().find(|b| b.name == "Moon"))
         .unwrap_or(&bodies[0])
         .clone();
+    // MOON_SOUND_WAV=out.wav: a minute of the body's sound to a file, and
+    // nothing else.
+    if let Ok(path) = std::env::var("MOON_SOUND_WAV") {
+        sound::render(&path, &start).expect("writing the sound");
+        return;
+    }
     let mut app = tranquility::app(start.world());
     app.insert_resource(Current(start))
         .insert_resource(Catalogue(bodies))
+        .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin))
         .add_systems(Update, (travel, describe));
-    // MOON_OFF=rocks,heavens,prints,rover leaves parts out, for measuring what
+    // MOON_OFF=rocks,heavens,prints,figure,rover leaves parts out, for measuring what
     // each costs.
     let off = std::env::var("MOON_OFF").unwrap_or_default();
     if !off.contains("rocks") {
@@ -64,6 +74,9 @@ fn main() {
     }
     if !off.contains("prints") {
         app.add_plugins(prints::PrintsPlugin);
+    }
+    if !off.contains("figure") {
+        app.add_plugins(figure::FigurePlugin);
     }
     if !off.contains("rover") {
         app.add_plugins(rover::RoverPlugin);
@@ -103,6 +116,6 @@ fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>,
         if w.jets > 0.0 { " · suit jets in flight" } else { "" },
         b.note,
     );
-    let names: Vec<String> = bodies.0.iter().enumerate().map(|(k, b)| format!("{} {}", (k + 1) % 10, b.name)).collect();
-    hud.keys = format!("{}{}", if b.rover { "R: drive the rover\n" } else { "" }, names.join("  "));
+    let names: Vec<String> = bodies.0.iter().enumerate().map(|(k, b)| format!("{} {}", k + 1, b.name)).collect();
+    hud.keys = format!("0: stroll (it walks, you watch){}\n{}", if b.rover { "   R: drive the rover" } else { "" }, names.join("  "));
 }

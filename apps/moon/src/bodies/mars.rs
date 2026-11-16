@@ -170,6 +170,9 @@ pub fn body() -> Body {
         roughness: 0.95,
         reflectance: 0.25,
         air: air(),
+        // Six millibars of cold carbon dioxide, and an afternoon breeze.
+        air_density: 0.020,
+        wind: 7.0,
         sun: (100.0, 24.0),
         stars: 0.0,
         // The sky does the filling.

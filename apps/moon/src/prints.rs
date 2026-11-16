@@ -1,4 +1,4 @@
-//! Bootprints. Every stride on foot presses a print into the soil: a
+//! Bootprints. Every footfall (see `gait`) presses a print into the soil: a
 //! ribbed sole a third of a metre long, left and right in turn, on the
 //! ground as it is drawn. Like the rover's tracks they are a factor on the
 //! ground's own colour (pressed soil is darker, the ribs' far walls
@@ -19,6 +19,8 @@ use tranquility::{
     vehicle::{Lattice, drawn_height},
 };
 
+use crate::gait::Footfall;
+
 /// Half the sole's width and length, m; how far apart the feet are.
 const SOLE: Vec2 = Vec2::new(0.075, 0.17);
 const STANCE: f32 = 0.13;
@@ -28,7 +30,7 @@ pub struct PrintsPlugin;
 
 impl Plugin for PrintsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, tread);
+        app.add_systems(Startup, setup).add_systems(Update, tread.after(crate::gait::Striding));
     }
 }
 
@@ -36,9 +38,6 @@ impl Plugin for PrintsPlugin {
 struct Prints {
     /// Corners of each print, in the entity's own frame.
     soles: Vec<[Vec3; 4]>,
-    /// Where the last one went down, and with which foot.
-    last: Option<Vec3>,
-    left: bool,
     lattice: Lattice,
 }
 
@@ -63,7 +62,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut props: Re
 fn tread(
     world: Res<WorldDef>,
     origin: Res<Origin>,
-    player: Single<(&Player, &Transform), Without<Prints>>,
+    mut falls: MessageReader<Footfall>,
     prints: Single<(&mut Prints, &Mesh3d, &Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -73,25 +72,16 @@ fn tread(
     if world.is_changed() {
         // Another body: these were left on the last one.
         prints.soles.clear();
-        prints.last = None;
         prints.lattice.clear();
+        falls.clear();
         stale = true;
     }
-    let (player, eye) = player.into_inner();
-    let walking = player.controlled && !player.flying && player.grounded;
-    let here = Vec3::new(eye.translation.x, player.feet, eye.translation.z) - frame.translation;
-    // A stride grows with the pace: a shuffle at a walk, a metre and more
-    // at a lope.
-    let pace = Vec2::new(player.velocity.x, player.velocity.z).length();
-    let stride = 0.45 + 0.45 * pace;
-    let due = match prints.last {
-        None => walking,
-        Some(last) => walking && last.distance(here) > stride,
-    };
-    if due {
-        let heading = Quat::from_rotation_y(player.yaw);
+    for fall in falls.read() {
+        let here = fall.at - frame.translation;
+        // Toes the way the walker is going.
+        let heading = Quat::from_rotation_y(fall.heading);
         let (forward, right) = (heading * Vec3::NEG_Z, heading * Vec3::X);
-        let side = if prints.left { -STANCE } else { STANCE };
+        let side = if fall.left { -STANCE } else { STANCE };
         let step = world.terrain.step(0) as f64;
         let mut corner = |x: f32, z: f32| {
             let p = here + right * (side + x * SOLE.x) + forward * (z * SOLE.y);
@@ -103,8 +93,6 @@ fn tread(
         if prints.soles.len() > MOST {
             prints.soles.drain(0..MOST / 8);
         }
-        prints.last = Some(here);
-        prints.left = !prints.left;
         stale = true;
     }
     if !stale {

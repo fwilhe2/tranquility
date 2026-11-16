@@ -145,6 +145,9 @@ pub fn body() -> Body {
         air: air(),
         // ½ρC_dA/m for a suited walker in 5.4 kg/m³ of nitrogen.
         drag: 0.0124,
+        // Huygens measured a few tenths of a metre a second at the ground.
+        air_density: 5.4,
+        wind: 0.4,
         sun: (130.0, 28.0),
         stars: 0.0,
         fill: 0.2,

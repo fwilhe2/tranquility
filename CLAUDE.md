@@ -17,6 +17,7 @@ cargo build -p <app>                 # what the Makefile does
 TRANQUILITY_BODY=mars target/debug/moon          # or a first argument
 TRANQUILITY_BENCH=10 TRANQUILITY_VSYNC=off target/debug/moon   # frame times
 MOON_DRIVE=chase,go TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # at the rover's wheel
+MOON_STROLL=1 TRANQUILITY_SHOT_AFTER=40 TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # 40 s into the stroll
 ```
 
 A cold build of Bevy takes ~25 min on this machine; later builds are incremental. Release (thin LTO, one codegen unit) and wasm builds are slow too.
@@ -38,4 +39,5 @@ A cold build of Bevy takes ~25 min on this machine; later builds are incremental
 - Facade parameters ride in the mesh: UV 0 = (distance along the outline, height above street level), vertex colour alpha = `facade::Windows::code()`. Change `facade.wesl` and `Windows` together.
 - `apps/potsdam/data/potsdam.json` is historical-walk's generated `src/cities/potsdam/city.json`, copied; regenerate it there (`npm run city potsdam`), never hand-edit it.
 - Bevy 0.20 specifics: shaders are WESL (`import bevy_pbr::render::…`), embedded with `embedded_asset!` and referenced as `embedded://tranquility/<file>`; events are `Message`s (`add_message`, `MessageWriter`/`MessageReader`); `bevy::prelude::World` exists, hence `WorldDef`.
-- No audio or gamepad features (they need alsa/libudev, not installed); add them deliberately.
+- Sound is synthesised, never loaded: `tranquility::sound` (a `Voice` is a function from time to a stereo sample, played through Bevy's audio as a custom `Decodable`), `apps/moon/src/sound.rs` the suit. Screenshot and bench runs are silent (`sound::wanted`). Audio needs ALSA's headers on Linux; no gamepad feature (libudev). `MOON_SOUND_WAV=out.wav` renders a minute of a body's sound for measuring.
+- The stroll (`apps/moon/src/stroll.rs`, key `0`, `MOON_STROLL=1`) only pushes `Player::steer`, like a pair of hands; it never moves the walker itself. Its view is for watching: no bob, no roll, no fast turns. Keep any motion (gait, swing) on the figure and its shadow, never on the camera.
