@@ -81,6 +81,8 @@ pub struct Stroll {
     arrived: Option<f32>,
     /// Asked for from outside (`MOON_STROLL`), not yet begun.
     pending: bool,
+    /// Where the land stands highest, on a body with nothing in the sky.
+    skyline: Option<f32>,
 }
 
 impl Default for Stroll {
@@ -98,6 +100,7 @@ impl Default for Stroll {
             was_hidden: false,
             arrived: None,
             pending: std::env::var_os("MOON_STROLL").is_some(),
+            skyline: None,
         }
     }
 }
@@ -115,7 +118,7 @@ fn planet(body: &Body) -> Option<&Companion> {
     body.companions.iter().find(|c| c.map != Map::Rock)
 }
 
-fn view(body: &Body) -> View {
+fn view(body: &Body, skyline: Option<f32>) -> View {
     match planet(body) {
         Some(c) => {
             // The planet's top inside the frame with a little sky over it,
@@ -126,12 +129,38 @@ fn view(body: &Body) -> View {
             let pitch = (0.12 * lens).max(top - 0.5 * lens);
             View { yaw: -c.azimuth.to_radians(), pitch: pitch.to_radians(), lens }
         }
-        None => View { yaw: body.look.0, pitch: 3f32.to_radians(), lens: 55.0 },
+        None => View { yaw: skyline.unwrap_or(body.look.0), pitch: 2.5f32.to_radians(), lens: 55.0 },
     }
 }
 
 fn wrap(angle: f32) -> f32 {
     (angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
+}
+
+/// Where nothing hangs in the sky, the head turns to the land: the bearing
+/// whose skyline stands highest within a few kilometres, not into the sun
+/// (whose glare flattens everything) and not straight away from it (where
+/// nothing casts a shadow you can see).
+fn skyline(ground: &dyn Ground, from: DVec2, sun_azimuth: f32) -> f32 {
+    let base = ground.height(from.x, from.y) + 1.6;
+    let sun = -sun_azimuth.to_radians();
+    let mut best = (f32::MIN, sun + 1.6);
+    for k in 0..36 {
+        let yaw = k as f32 * 10f32.to_radians();
+        let off = wrap(yaw - sun).abs();
+        if off < 0.9 || off > 2.6 {
+            continue;
+        }
+        let dir = DVec2::new(-yaw.sin() as f64, -yaw.cos() as f64);
+        let rise = [400.0, 800.0, 1600.0, 2400.0, 3200.0, 4800.0, 6400.0]
+            .iter()
+            .map(|d| ((ground.height(from.x + dir.x * d, from.y + dir.y * d) - base) / *d as f32).atan())
+            .fold(f32::MIN, f32::max);
+        if rise > best.0 {
+            best = (rise, yaw);
+        }
+    }
+    wrap(best.1)
 }
 
 /// Moves `x` toward `to` like a mass on a critically damped spring of
@@ -226,9 +255,16 @@ fn guide(
         // Another body: wait for its ground, then set off again.
         stroll.arrived = None;
         stroll.stick = 0.0;
-        stroll.bearing = view(body).yaw;
-        stroll.chosen = stroll.bearing;
+        stroll.skyline = None;
         stroll.look_in = 0.0;
+    }
+    let here = origin.world(eye.translation);
+    if stroll.skyline.is_none() && planet(body).is_none() {
+        stroll.skyline = Some(skyline(&*world.ground, here, body.sun.0));
+    }
+    if current.is_changed() {
+        stroll.bearing = view(body, stroll.skyline).yaw;
+        stroll.chosen = stroll.bearing;
     }
     match &mut stroll.arrived {
         Some(since) => *since += dt,
@@ -237,7 +273,7 @@ fn guide(
     }
 
     // The head.
-    let aim = view(body);
+    let aim = view(body, stroll.skyline);
     let (mut yaw, mut pitch) = (player.yaw, player.pitch);
     let to = yaw + wrap(aim.yaw - yaw);
     ease(&mut yaw, &mut stroll.turning.x, to, 0.45, dt);
@@ -246,7 +282,6 @@ fn guide(
     eye.rotation = Quat::from_euler(EulerRot::YXZ, player.yaw, player.pitch, 0.0);
 
     // The feet: stand until the ground is there, then go.
-    let here = origin.world(eye.translation);
     let going = stroll.arrived.is_some_and(|since| since > 1.5);
     stroll.stick += ((if going { 1.0 } else { 0.0 }) - stroll.stick) * (1.0 - (-dt / 1.5).exp());
     stroll.look_in -= dt;
@@ -291,7 +326,7 @@ fn guide(
 /// The lens: longer on a stroll, the walker's own again after it.
 fn lens(time: Res<Time>, current: Res<Current>, mut stroll: ResMut<Stroll>, mut projection: Single<&mut Projection, With<Player>>) {
     let dt = time.delta_secs().min(0.1);
-    let to = if stroll.on { view(&current.0).lens } else { OWN_LENS };
+    let to = if stroll.on { view(&current.0, stroll.skyline).lens } else { OWN_LENS };
     if (stroll.lens - to).abs() < 0.01 && stroll.zooming.abs() < 0.01 {
         return;
     }

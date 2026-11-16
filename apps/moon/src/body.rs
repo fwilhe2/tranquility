@@ -175,7 +175,7 @@ impl Body {
         // Lambertian ground of that albedo, seen from its own shadow.
         let ambient = self.fill * sunlight * self.albedo * (3000.0 / (SUN_LUX * 0.11));
         // The walker meets the land with its rocks on it.
-        let ground: Arc<dyn Ground> = Arc::new(Strewn { land: self.land.clone(), rocks: self.rocks.clone(), sea: self.sea.as_ref().map(|sea| sea.level) });
+        let ground: Arc<dyn Ground> = Arc::new(Strewn::new(self.land.clone(), self.rocks.clone(), self.sea.as_ref().map(|sea| sea.level)));
         WorldDef {
             name: self.name.into(),
             ground,

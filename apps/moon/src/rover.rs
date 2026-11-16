@@ -57,6 +57,7 @@ impl Plugin for RoverPlugin {
                     (park.run_if(resource_changed::<WorldDef>), board, steer).chain().before(Drive),
                     (pose_wheels, ride, throw_dust, lay_tracks).chain().after(Drive),
                     (fly_dust, draw_dust).chain().after(Drive),
+                    stand_clear.after(Walking),
                 ),
             );
     }
@@ -433,6 +434,31 @@ fn between(a: Vec3, b: Vec3, radius: f32) -> Transform {
     Transform::from_translation((a + b) / 2.0)
         .with_rotation(Quat::from_rotation_arc(Vec3::Y, axis.normalize_or(Vec3::Y)))
         .with_scale(Vec3::new(radius, axis.length(), radius))
+}
+
+/// Someone on foot cannot walk through the rover: they are pushed back
+/// out of its footprint (wheels and fenders, and a body's width round
+/// them), and lose whatever speed carried them in.
+fn stand_clear(driving: Res<Driving>, rover: Option<Single<&Transform, With<Rover>>>, player: Single<(&mut Player, &mut Transform), Without<Rover>>) {
+    let Some(rover) = rover else { return };
+    let (mut player, mut eye) = player.into_inner();
+    if driving.aboard || player.flying || !player.controlled {
+        return;
+    }
+    let half = Vec2::new(TRACK / 2.0 + 0.2, WHEELBASE / 2.0 + WHEEL_R + 0.1) + Vec2::splat(0.3);
+    let turn = rover.rotation.inverse();
+    let d = turn * (eye.translation - rover.translation);
+    let over = half - Vec2::new(d.x.abs(), d.z.abs());
+    if over.x <= 0.0 || over.y <= 0.0 {
+        return;
+    }
+    // Out the nearest side.
+    let out = if over.x < over.y { Vec3::X * d.x.signum() * over.x } else { Vec3::Z * d.z.signum() * over.y };
+    let out = rover.rotation * out;
+    eye.translation += Vec3::new(out.x, 0.0, out.z);
+    let normal = Vec3::new(out.x, 0.0, out.z).normalize_or_zero();
+    let into = player.velocity.dot(normal).min(0.0);
+    player.velocity -= normal * into;
 }
 
 /// **R**: aboard, or out. **V**: seat or chase camera.

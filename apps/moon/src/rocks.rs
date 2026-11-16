@@ -10,7 +10,7 @@
 //! stones to every boulder. The ground shader draws everything under a
 //! quarter of a metre; these are the rest.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tranquility::{ground::prop, prelude::*, terrain::ChunkMeshed};
 
@@ -181,34 +181,74 @@ pub fn in_cell(land: &dyn Land, look: &Rocks, sea: Option<f32>, i: i64, j: i64, 
 /// Rocks from this size up are in the way; smaller ones are stepped over.
 pub const SOLID: f32 = 0.5;
 
-/// Whether a rock too big to step over stands within `margin` of a point.
-pub fn solid(land: &dyn Land, look: &Rocks, sea: Option<f32>, x: f64, z: f64, margin: f32) -> bool {
-    if look.density <= 0.0 || look.largest < SOLID {
-        return false;
-    }
-    // No rock reaches further than half the largest: at most the cells
-    // that far round the point.
-    let far = (0.5 * look.largest + margin) as f64;
-    let (i0, i1) = (((x - far) / CELL).floor() as i64, ((x + far) / CELL).floor() as i64);
-    let (j0, j1) = (((z - far) / CELL).floor() as i64, ((z + far) / CELL).floor() as i64);
-    let mut hit = false;
-    for j in j0..=j1 {
-        for i in i0..=i1 {
-            in_cell(land, look, sea, i, j, SOLID, |rock| {
-                let (dx, dz) = ((rock.x - x) as f32, (rock.z - z) as f32);
-                let reach = rock.reach() + margin;
-                hit |= dx * dx + dz * dz < reach * reach;
-            });
-        }
-    }
-    hit
-}
-
 /// A body's land with its rocks on it: the ground the walker meets.
 pub struct Strewn {
     pub land: Arc<dyn Land>,
     pub rocks: Rocks,
     pub sea: Option<f32>,
+    /// The solid rocks of recently asked cells: where in the cell (m from
+    /// its corner) and how far each reaches. Placement is a pure function
+    /// of the cell, so this only remembers; a slot is a cell, by hash.
+    cells: Box<[Mutex<Option<SolidCell>>]>,
+}
+
+struct SolidCell {
+    i: i64,
+    j: i64,
+    rocks: Vec<[f32; 3]>,
+}
+
+const CACHED: usize = 1024;
+
+impl Strewn {
+    pub fn new(land: Arc<dyn Land>, rocks: Rocks, sea: Option<f32>) -> Self {
+        Self { land, rocks, sea, cells: (0..CACHED).map(|_| Mutex::new(None)).collect() }
+    }
+
+    fn with_cell(&self, i: i64, j: i64, mut f: impl FnMut(&[[f32; 3]])) {
+        let slot = &self.cells[hash(i as i32, j as i32, 0x50c1) as usize % CACHED];
+        let Ok(mut slot) = slot.lock() else { return };
+        if !slot.as_ref().is_some_and(|c| c.i == i && c.j == j) {
+            let mut rocks = Vec::new();
+            in_cell(&*self.land, &self.rocks, self.sea, i, j, SOLID, |rock| {
+                rocks.push([(rock.x - i as f64 * CELL) as f32, (rock.z - j as f64 * CELL) as f32, rock.reach()]);
+            });
+            *slot = Some(SolidCell { i, j, rocks });
+        }
+        if let Some(cell) = slot.as_ref() {
+            f(&cell.rocks);
+        }
+    }
+
+    /// Whether a rock too big to step over stands within `margin` of a
+    /// point.
+    pub fn solid(&self, x: f64, z: f64, margin: f32) -> bool {
+        let look = &self.rocks;
+        if look.density <= 0.0 || look.largest < SOLID {
+            return false;
+        }
+        // No rock reaches further than half the largest: at most the
+        // cells that far round the point.
+        let far = (0.5 * look.largest + margin) as f64;
+        let (i0, i1) = (((x - far) / CELL).floor() as i64, ((x + far) / CELL).floor() as i64);
+        let (j0, j1) = (((z - far) / CELL).floor() as i64, ((z + far) / CELL).floor() as i64);
+        let mut hit = false;
+        for j in j0..=j1 {
+            for i in i0..=i1 {
+                if hit {
+                    return true;
+                }
+                let (cx, cz) = ((x - i as f64 * CELL) as f32, (z - j as f64 * CELL) as f32);
+                self.with_cell(i, j, |rocks| {
+                    hit |= rocks.iter().any(|r| {
+                        let (dx, dz, reach) = (r[0] - cx, r[1] - cz, r[2] + margin);
+                        dx * dx + dz * dz < reach * reach
+                    });
+                });
+            }
+        }
+        hit
+    }
 }
 
 impl Ground for Strewn {
@@ -233,7 +273,7 @@ impl Ground for Strewn {
     }
 
     fn blocked(&self, x: f64, z: f64) -> bool {
-        self.land.blocked(x, z) || solid(&*self.land, &self.rocks, self.sea, x, z, 0.0)
+        self.land.blocked(x, z) || self.solid(x, z, 0.0)
     }
 }
 
