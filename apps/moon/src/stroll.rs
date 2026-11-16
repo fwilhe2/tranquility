@@ -36,6 +36,7 @@ use crate::{
     Catalogue, Current,
     body::Body,
     heavens::{Companion, Map},
+    lander::{KEEP_OFF, Lander},
     rover::Rover,
 };
 
@@ -217,7 +218,7 @@ fn switch(
 }
 
 /// What a bearing would cost over the next forty metres.
-fn cost(body: &Body, ground: &dyn Ground, rover: Option<DVec2>, from: DVec2, yaw: f32) -> f32 {
+fn cost(body: &Body, ground: &dyn Ground, rover: Option<DVec2>, lander: Option<DVec2>, from: DVec2, yaw: f32) -> f32 {
     let dir = DVec2::new(-yaw.sin() as f64, -yaw.cos() as f64);
     let across = DVec2::new(-dir.y, dir.x);
     let sea = body.sea.as_ref().map(|sea| sea.level);
@@ -240,6 +241,9 @@ fn cost(body: &Body, ground: &dyn Ground, rover: Option<DVec2>, from: DVec2, yaw
         if rover.is_some_and(|r| r.distance(p) < 4.0) {
             c += 150.0;
         }
+        if lander.is_some_and(|l| l.distance(p) < KEEP_OFF as f64 + 1.5) {
+            c += 150.0;
+        }
         cost += weight * c;
         (before, gone) = (h, d);
     }
@@ -254,8 +258,9 @@ fn guide(
     origin: Res<Origin>,
     chunks: Res<Chunks>,
     mut stroll: ResMut<Stroll>,
-    player: Single<(&mut Player, &mut Transform), Without<Rover>>,
-    rover: Option<Single<&Transform, With<Rover>>>,
+    player: Single<(&mut Player, &mut Transform), (Without<Rover>, Without<Lander>)>,
+    rover: Option<Single<&Transform, (With<Rover>, Without<Lander>)>>,
+    lander: Option<Single<&Transform, (With<Lander>, Without<Rover>)>>,
 ) {
     let dt = time.delta_secs().min(0.1);
     if !stroll.on || dt <= 0.0 {
@@ -301,13 +306,14 @@ fn guide(
     if stroll.look_in <= 0.0 && going {
         stroll.look_in = 0.4;
         let rover = rover.map(|r| origin.world(r.translation));
+        let lander = lander.map(|l| origin.world(l.translation));
         let mut best = (f32::MAX, stroll.chosen);
         for k in -BEARINGS..=BEARINGS {
             let off = (k as f32 * 10.0).to_radians();
             let yaw = aim.yaw + off;
             // Straight at the planet if nothing says otherwise, and no
             // change of mind without a reason.
-            let c = cost(body, &*world.ground, rover, here, yaw) + 6.0 * off * off + 1.5 * wrap(yaw - stroll.chosen).abs();
+            let c = cost(body, &*world.ground, rover, lander, here, yaw) + 6.0 * off * off + 1.5 * wrap(yaw - stroll.chosen).abs();
             if c < best.0 {
                 best = (c, yaw);
             }

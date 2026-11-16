@@ -129,6 +129,9 @@ albedo, grip) and a ground. Everything else follows from the row:
   (N(>D) ≈ 0.08 D⁻² up to a saturation diameter set by the surface's
   age), Pike's depth and rim ratios, and a spread of wear from crisp to
   nearly gone. Bodies without craters (Io, Sputnik Planitia) have none.
+- **The lander** that brought it stands near the start: a lunar module's
+  descent stage as the crews left it, in crinkled gold and black foil on
+  four splayed legs, each footpad on the ground under it.
 - **The rover** is the LRV at its real size, mass and power on a
   rigid-body suspension. It takes six seconds to reach 13 km/h on the
   Moon, because grip is weight.

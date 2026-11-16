@@ -46,6 +46,11 @@ const REACH: f32 = 5.0;
 
 pub struct RoverPlugin;
 
+/// Where the rover is parked on a new body: what is placed round it runs
+/// after.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Parked;
+
 impl Plugin for RoverPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(tranquility::vehicle::VehiclePlugin)
@@ -54,7 +59,7 @@ impl Plugin for RoverPlugin {
             .add_systems(
                 Update,
                 (
-                    (park.run_if(resource_changed::<WorldDef>), board, steer).chain().before(Drive),
+                    (park.run_if(resource_changed::<WorldDef>).in_set(Parked), board, steer).chain().before(Drive),
                     (pose_wheels, ride, throw_dust, lay_tracks).chain().after(Drive),
                     (fly_dust, draw_dust).chain().after(Drive),
                     stand_clear.after(Walking),
