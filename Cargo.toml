@@ -35,6 +35,15 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
+# The engine and the moon are mostly arithmetic run a hundred million times
+# (noise, craters, meshing): unoptimised, the moon takes a minute to appear
+# and a laptop's fan and clock give up meanwhile.
+[profile.dev.package.tranquility]
+opt-level = 3
+
+[profile.dev.package.moon]
+opt-level = 3
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

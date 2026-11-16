@@ -80,7 +80,11 @@ impl Ground for Moon {
         base + self.craters.height(x, z, step, FLOODED, &|cx, cz| self.kept(cx, cz))
     }
 
-    fn tint(&self, x: f64, z: f64, _height: f32, normal: Vec3) -> LinearRgba {
+    fn tint(&self, x: f64, z: f64, height: f32, normal: Vec3) -> LinearRgba {
+        self.tint_at(x, z, height, normal, 0.0)
+    }
+
+    fn tint_at(&self, x: f64, z: f64, _height: f32, normal: Vec3, step: f32) -> LinearRgba {
         let mare = self.mare(x, z);
         // Highland anorthosite reflects twice what mare basalt does.
         let albedo = 0.165 * (1.0 - mare) + 0.078 * mare;
@@ -89,7 +93,7 @@ impl Ground for Moon {
         // Steep slopes shed their weathered top and show brighter, fresher
         // material; so does what young craters threw out.
         let slope = (1.0 - normal.y).clamp(0.0, 0.3) / 0.3;
-        let rays = self.craters.ejecta(x, z, FLOODED, &|cx, cz| self.kept(cx, cz));
+        let rays = self.craters.ejecta(x, z, step, FLOODED, &|cx, cz| self.kept(cx, cz));
         let grain = hash2(x * 0.7, z * 0.7) * 0.03 - 0.015;
         let a = albedo * mottle * (1.0 + 0.3 * slope + 0.6 * rays) + grain * albedo;
         // Mature soil reddens: reflectance climbs toward long wavelengths,

@@ -16,7 +16,7 @@ import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
-    mesh_view_bindings::lights,
+    mesh_view_bindings::{lights, view},
 };
 
 // `ground::GroundParams`.
@@ -264,6 +264,12 @@ struct Detail {
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
     var pbr_input = pbr_input_from_standard_material(in, is_front);
+    // On a round world the vertex shader lowered this point by the curve.
+    // It is lit where it would be on a flat one, which is where the sun's
+    // shadow maps have it.
+    let away = in.world_position.xz - view.world_position.xz;
+    let away2 = dot(away, away);
+    pbr_input.world_position.y += away2 * ground.curve.z * (1.0 + away2 * ground.curve.z * ground.curve.z);
     // Pattern weights: cobbles, setts, gravel, grass, regolith; the rest is
     // plain (see `ground::Pattern::weights`).
     let w = array<f32, 5>(in.uv.x, in.uv.y, in.uv_b.x, in.uv_b.y, in.color.a);

@@ -5,12 +5,13 @@
 
 import bevy_pbr::render::{
     mesh_functions,
+    mesh_view_bindings::view,
     forward_io::{Vertex, VertexOutput, decompress_vertex},
     view_transformations::position_world_to_clip,
 };
 
-// Camera x and z in render space, and 1 / (2 · radius), or 0 on a flat
-// world. The start of the extension's uniform, whatever follows it.
+// z: 1 / (2 · radius), or 0 on a flat world. The start of the extension's
+// uniform, whatever follows it.
 struct Curve {
     at: vec4<f32>,
 }
@@ -18,7 +19,7 @@ struct Curve {
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> curve: Curve;
 
 fn sink(world: vec4<f32>) -> vec4<f32> {
-    let d = world.xz - curve.at.xy;
+    let d = world.xz - view.world_position.xz;
     let d2 = dot(d, d);
     let k = curve.at.z;
     // The first two terms of R − √(R² − d²): the root itself loses every

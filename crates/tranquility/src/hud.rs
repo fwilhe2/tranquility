@@ -131,7 +131,7 @@ fn update(
         }
         SunPath::Fixed { .. } => format!("sun {:.0}°", sun.elevation),
     };
-    text.0 = format!(
+    let status_text = format!(
         "{}   {:.0} fps ({})   x {:.0}  z {:.0}  alt {:.0} m   {}   {}",
         world.name,
         status.fps,
@@ -142,13 +142,22 @@ fn update(
         if !hud.mode.is_empty() { hud.mode.as_str() } else if player.flying { "FLY" } else { "WALK" },
         sun_text,
     );
+    if text.0 != status_text {
+        text.0 = status_text;
+    }
     if hud.is_changed() || quality.is_changed() {
-        info.0 = hud.info.clone();
-        help.0 = format!(
+        // Only what has really changed: laying text out again costs.
+        if info.0 != hud.info {
+            info.0 = hud.info.clone();
+        }
+        let keys = format!(
             "click: capture mouse   WASD: walk   Shift: faster   Space: jump   F: fly (Space/C up/down)\n\
              [ ]: sun   B: air on/off   Q: quality   H: hide text   Esc: release mouse{}",
             if hud.keys.is_empty() { String::new() } else { format!("   {}", hud.keys) }
         );
+        if help.0 != keys {
+            help.0 = keys;
+        }
     }
 }
 

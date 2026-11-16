@@ -45,14 +45,18 @@ impl Ground for Mercury {
         regional + rolling + scarp + self.craters.height(x, z, step, f32::MAX, &|_, _| true)
     }
 
-    fn tint(&self, x: f64, z: f64, _height: f32, normal: Vec3) -> LinearRgba {
+    fn tint(&self, x: f64, z: f64, height: f32, normal: Vec3) -> LinearRgba {
+        self.tint_at(x, z, height, normal, 0.0)
+    }
+
+    fn tint_at(&self, x: f64, z: f64, _height: f32, normal: Vec3, step: f32) -> LinearRgba {
         // Darker than the Moon and less red: carbon, perhaps, from the
         // old crust. Smooth volcanic plains run a little brighter.
         let plains = smoothstep(-0.1, 0.25, fbm(x, z, 22_000.0, 4, 0.5, 63));
         let albedo = 0.1 + 0.035 * plains;
         let mottle = 1.0 + 0.1 * fbm(x, z, 500.0, 4, 0.5, 64);
         let slope = (1.0 - normal.y).clamp(0.0, 0.3) / 0.3;
-        let rays = self.craters.ejecta(x, z, f32::MAX, &|_, _| true);
+        let rays = self.craters.ejecta(x, z, step, f32::MAX, &|_, _| true);
         let a = albedo * mottle * (1.0 + 0.3 * slope + 0.75 * rays);
         // Hollows: bright, faintly blue patches where something volatile
         // has gone out of the ground. They keep to low spots.

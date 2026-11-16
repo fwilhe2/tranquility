@@ -5,6 +5,8 @@
 //!   `TRANQUILITY_SUN=12` the elevation (fixed sun).
 //! - `TRANQUILITY_SCREENSHOT=out.png` saves one frame once the terrain has
 //!   streamed in, then quits.
+//! - `TRANQUILITY_BENCH=10` measures frame times for that many seconds once
+//!   the terrain has streamed in, prints them, then quits.
 
 use bevy::prelude::*;
 
@@ -25,6 +27,62 @@ impl Plugin for ToolsPlugin {
     fn build(&self, app: &mut App) {
         #[cfg(not(target_arch = "wasm32"))]
         screenshot::add(app);
+        if let Some(seconds) = env_f32("TRANQUILITY_BENCH") {
+            app.insert_resource(Bench { seconds, frames: Vec::new(), since: None, began: None, busy: Vec::new() })
+                .add_systems(First, |mut bench: ResMut<Bench>| bench.began = Some(std::time::Instant::now()))
+                .add_systems(Last, |mut bench: ResMut<Bench>| {
+                    if let Some(began) = bench.began {
+                        let ms = began.elapsed().as_secs_f32() * 1000.0;
+                        bench.busy.push(ms);
+                    }
+                })
+                .add_systems(Update, bench);
+        }
+    }
+}
+
+#[derive(Resource)]
+struct Bench {
+    seconds: f32,
+    frames: Vec<f32>,
+    since: Option<f32>,
+    /// When this frame's update began, and how long each update took, ms:
+    /// the app's own share of the frame, before the renderer's.
+    began: Option<std::time::Instant>,
+    busy: Vec<f32>,
+}
+
+fn bench(time: Res<Time<Real>>, terrain: Res<crate::terrain::Chunks>, mut bench: ResMut<Bench>, mut exit: MessageWriter<AppExit>) {
+    let t = time.elapsed_secs();
+    if t < 3.0 || (bench.since.is_none() && !terrain.is_settled()) {
+        return;
+    }
+    if bench.since.is_none() {
+        bench.busy.clear();
+        println!("bench: ground settled after {t:.1} s");
+    }
+    let since = *bench.since.get_or_insert(t);
+    bench.frames.push(time.delta_secs() * 1000.0);
+    if t - since >= bench.seconds {
+        let mut ms = std::mem::take(&mut bench.frames);
+        ms.sort_by(f32::total_cmp);
+        let mean = ms.iter().sum::<f32>() / ms.len() as f32;
+        let at = |q: f32| ms[((ms.len() - 1) as f32 * q) as usize];
+        let mut busy = std::mem::take(&mut bench.busy);
+        busy.sort_by(f32::total_cmp);
+        let update = busy.get(busy.len() / 2).copied().unwrap_or(0.0);
+        println!(
+            "bench: {} frames, mean {:.1} ms ({:.1} fps), median {:.1} ms, 95 % {:.1} ms, worst {:.1} ms; update median {:.1} ms, worst {:.1} ms",
+            ms.len(),
+            mean,
+            1000.0 / mean,
+            at(0.5),
+            at(0.95),
+            at(1.0),
+            update,
+            busy.last().copied().unwrap_or(0.0),
+        );
+        exit.write(AppExit::Success);
     }
 }
 

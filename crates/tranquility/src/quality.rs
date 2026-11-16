@@ -6,7 +6,7 @@
 
 use bevy::{
     anti_alias::{fxaa::Fxaa, smaa::Smaa, taa::TemporalAntiAliasing},
-    light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
+    light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, ShadowFilteringMethod},
     pbr::ScreenSpaceAmbientOcclusion,
     post_process::bloom::Bloom,
     prelude::*,
@@ -30,6 +30,18 @@ impl Quality {
             Quality::High => Quality::Medium,
             Quality::Medium => Quality::Low,
             Quality::Low => Quality::High,
+        }
+    }
+
+    /// The coarsest level of the ground that still draws into the sun's
+    /// shadow maps. Each level doubles the grid step, and the far cascade
+    /// is drawn from every chunk in its reach: past a few levels the
+    /// shadows gained are a texel or two wide and cost a third of the frame.
+    pub fn shadow_levels(self) -> u32 {
+        match self {
+            Quality::High => 5,
+            Quality::Medium => 3,
+            Quality::Low => 2,
         }
     }
 
@@ -92,6 +104,9 @@ fn apply(
         } else {
             cam.insert(Fxaa::default());
         }
+        // A shadow lookup of one tap where the frame is tight: the ground
+        // fills half the screen and every pixel of it asks.
+        cam.insert(if q == Quality::High || off("hardshadow") { ShadowFilteringMethod::Gaussian } else { ShadowFilteringMethod::Hardware2x2 });
         if q != Quality::Low && !off("bloom") {
             cam.insert(Bloom::NATURAL);
         }

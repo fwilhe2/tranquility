@@ -40,6 +40,7 @@ pub mod quality;
 pub mod sky;
 pub mod terrain;
 pub mod tools;
+pub mod vehicle;
 pub mod water;
 pub mod world;
 
@@ -97,7 +98,13 @@ pub fn app(world: WorldDef) -> App {
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: world.name.clone(),
-            present_mode: PresentMode::AutoVsync,
+            // TRANQUILITY_VSYNC=off for measuring: frame times then show
+            // what a frame costs, not when the display wants one.
+            present_mode: if std::env::var("TRANQUILITY_VSYNC").is_ok_and(|v| v == "off") {
+                PresentMode::AutoNoVsync
+            } else {
+                PresentMode::AutoVsync
+            },
             canvas: Some("#bevy".into()),
             fit_canvas_to_parent: true,
             ..default()

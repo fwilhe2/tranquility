@@ -38,7 +38,7 @@ pub struct GroundDetail {
 /// shaders expect it.
 #[derive(ShaderType, Reflect, Debug, Clone, Default)]
 struct GroundParams {
-    /// Camera x, z in render space; 1 / (2 · radius), 0 when flat.
+    /// z: 1 / (2 · radius), 0 when flat.
     curve: Vec4,
     /// The floating origin in whole metres (x, z).
     origin: IVec4,
@@ -69,6 +69,9 @@ pub struct Curved {
 }
 
 impl MaterialExtension for Curved {
+    fn fragment_shader() -> ShaderRef {
+        "embedded://tranquility/curve_fragment.wesl".into()
+    }
     fn vertex_shader() -> ShaderRef {
         VERTEX.into()
     }
@@ -122,38 +125,43 @@ impl Plugin for GroundPlugin {
         embedded_asset!(app, "ground.wesl");
         embedded_asset!(app, "curve_vertex.wesl");
         embedded_asset!(app, "curve_prepass.wesl");
+        embedded_asset!(app, "curve_fragment.wesl");
         app.add_plugins((
             MaterialPlugin::<GroundMaterial>::default(),
             MaterialPlugin::<PropMaterial>::default(),
         ))
-        // After everything that moves the camera this frame.
-        .add_systems(PostUpdate, follow_camera.before(TransformSystems::Propagate));
+        .add_systems(PostUpdate, tell_shaders);
     }
 }
 
-/// Tells the shaders where the camera and the floating origin are.
-fn follow_camera(
+/// Tells the shaders the world's curve and where the floating origin is.
+/// Neither changes from frame to frame: a material that changes makes Bevy
+/// prepare every mesh that wears it again, and there are thousands of rocks.
+fn tell_shaders(
     world: Res<WorldDef>,
     origin: Res<Origin>,
-    camera: Single<&Transform, With<Camera3d>>,
     terrain: Option<Res<TerrainMaterial>>,
     mut grounds: ResMut<Assets<GroundMaterial>>,
     mut props: ResMut<Assets<PropMaterial>>,
-    mut last: Local<Vec4>,
 ) {
     let k = world.terrain.radius.map_or(0.0, |r| 1.0 / (2.0 * r));
-    let curve = Vec4::new(camera.translation.x, camera.translation.z, k, 0.0);
-    if let Some(mut material) = terrain.and_then(|t| grounds.get_mut(&t.0)) {
-        material.extension.params.curve = curve;
-        material.extension.params.origin = IVec4::new(origin.0.x as i64 as i32, origin.0.y as i64 as i32, 0, 0);
-    }
-    // On a flat world nothing changes, and the props are left alone.
-    if curve != *last && (k > 0.0 || last.z > 0.0) {
-        for (_, material) in props.iter_mut() {
-            material.extension.curve = curve;
+    let curve = Vec4::new(0.0, 0.0, k, 0.0);
+    let at = IVec4::new(origin.0.x as i64 as i32, origin.0.y as i64 as i32, 0, 0);
+    if let Some(terrain) = terrain {
+        let stale = grounds.get(&terrain.0).is_some_and(|m| m.extension.params.curve != curve || m.extension.params.origin != at);
+        if stale && let Some(mut material) = grounds.get_mut(&terrain.0) {
+            material.extension.params.curve = curve;
+            material.extension.params.origin = at;
         }
     }
-    *last = curve;
+    if world.is_changed() || props.is_changed() {
+        let stale: Vec<_> = props.iter().filter(|(_, m)| m.extension.curve != curve).map(|(id, _)| id).collect();
+        for id in stale {
+            if let Some(mut material) = props.get_mut(id) {
+                material.extension.curve = curve;
+            }
+        }
+    }
 }
 
 /// What the ground shader draws below the mesh's resolution. A tint function

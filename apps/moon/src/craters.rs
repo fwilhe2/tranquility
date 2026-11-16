@@ -80,6 +80,75 @@ fn bits(h: u32) -> f32 {
     (h & 0xffffff) as f32 / 16777216.0
 }
 
+/// A crater as its cell holds it: the centre as a share of the cell.
+#[derive(Clone, Copy, Default)]
+struct Seed {
+    u: f32,
+    v: f32,
+    radius: f32,
+    fresh: f32,
+    seed: u32,
+}
+
+/// The craters of one cell of one class.
+#[derive(Clone, Copy)]
+struct Cell {
+    key: (u32, i32, i32),
+    count: u8,
+    craters: [Seed; SLOTS as usize],
+}
+
+/// Cells remembered per thread, direct-mapped.
+const REMEMBERED: usize = 1024;
+
+thread_local! {
+    /// A chunk asks about the same few cells ten thousand times over, and
+    /// deriving a cell is a dozen hashes: so each thread remembers the
+    /// cells it derived last. A cell is a pure function of its class's
+    /// salt and its coordinates, so a slot that is overwritten is simply
+    /// derived again when wanted.
+    static CELLS: std::cell::RefCell<Vec<Cell>> = std::cell::RefCell::new(vec![
+        Cell { key: (0, i32::MIN, i32::MIN), count: 0, craters: [Seed::default(); SLOTS as usize] };
+        REMEMBERED
+    ]);
+}
+
+fn derive(class: &Class, i: i32, j: i32) -> Cell {
+    let mut cell = Cell { key: (class.salt, i, j), count: 0, craters: [Seed::default(); SLOTS as usize] };
+    let id = hash(i, j, class.salt);
+    for slot in 0..SLOTS {
+        let h = hash(id as i32, slot as i32, class.salt);
+        if bits(h) >= class.chance {
+            continue;
+        }
+        let (h1, h2) = (hash(h as i32, 1, class.salt), hash(h as i32, 2, class.salt));
+        // N(>D) ∝ D⁻² between d and 4d.
+        let d = class.d / (1.0 - bits(h2) * (15.0 / 16.0)).sqrt();
+        cell.craters[cell.count as usize] = Seed {
+            u: (h1 & 0xffff) as f32 / 65536.0,
+            v: (h1 >> 16) as f32 / 65536.0,
+            radius: 0.5 * d,
+            // Most of an equilibrium population is old.
+            fresh: (1.0 - bits(h2 >> 8 ^ h1)).powf(2.4),
+            seed: h1 ^ h2,
+        };
+        cell.count += 1;
+    }
+    cell
+}
+
+fn cell_craters(class: &Class, i: i32, j: i32) -> Cell {
+    CELLS.with_borrow_mut(|cells| {
+        // Neighbouring cells of one class must not share a slot: a scan of
+        // 3×3 would then miss on every query.
+        let slot = ((i as u32).wrapping_mul(7) ^ (j as u32).wrapping_mul(13) ^ class.salt.wrapping_mul(0x9e37)) as usize % REMEMBERED;
+        if cells[slot].key != (class.salt, i, j) {
+            cells[slot] = derive(class, i, j);
+        }
+        cells[slot]
+    })
+}
+
 impl Craters {
     pub fn new(p: Population) -> Self {
         let mut classes = Vec::new();
@@ -130,29 +199,18 @@ impl Craters {
             };
             for j in j0..j0 + n {
                 for i in i0..i0 + n {
-                    let cell = hash(i as i32, j as i32, class.salt);
-                    for slot in 0..SLOTS {
-                        let h = hash(cell as i32, slot as i32, class.salt);
-                        if bits(h) >= class.chance {
-                            continue;
-                        }
-                        let (h1, h2) = (hash(h as i32, 1, class.salt), hash(h as i32, 2, class.salt));
-                        // N(>D) ∝ D⁻² between d and 4d.
-                        let d = class.d / (1.0 - bits(h2) * (15.0 / 16.0)).sqrt();
-                        let radius = 0.5 * d;
-                        // Centres stay a diameter inside the 3×3 block.
-                        let cx = (i as f64 + (h1 & 0xffff) as f64 / 65536.0) * class.cell;
-                        let cz = (j as f64 + (h1 >> 16) as f64 / 65536.0) * class.cell;
+                    let cell = cell_craters(class, i as i32, j as i32);
+                    for c in &cell.craters[..cell.count as usize] {
+                        let cx = (i as f64 + c.u as f64) * class.cell;
+                        let cz = (j as f64 + c.v as f64) * class.cell;
                         let offset = Vec2::new((x - cx) as f32, (z - cz) as f32);
-                        if offset.length_squared() >= (reach * radius) * (reach * radius) {
+                        if offset.length_squared() >= (reach * c.radius) * (reach * c.radius) {
                             continue;
                         }
-                        if d > ask_above && !keep(cx, cz) {
+                        if 2.0 * c.radius > ask_above && !keep(cx, cz) {
                             continue;
                         }
-                        // Most of an equilibrium population is old.
-                        let fresh = (1.0 - bits(h2 >> 8 ^ h1)).powf(2.4);
-                        visit(&Crater { offset, radius, fresh, seed: h1 ^ h2 });
+                        visit(&Crater { offset, radius: c.radius, fresh: c.fresh, seed: c.seed });
                     }
                 }
             }
@@ -204,9 +262,10 @@ impl Craters {
     /// craters have thrown out fresh, unweathered material, as a bright
     /// collar round the rim that breaks up into rays further out, and their
     /// walls have not darkened yet.
-    pub fn ejecta(&self, x: f64, z: f64, ask_above: f32, keep: &dyn Fn(f64, f64) -> bool) -> f32 {
+    pub fn ejecta(&self, x: f64, z: f64, step: f32, ask_above: f32, keep: &dyn Fn(f64, f64) -> bool) -> f32 {
         let mut bright = 0.0f32;
-        self.each(x, z, 8.0, 3.5, true, ask_above, keep, |c| {
+        // Rays narrower than the grid cannot be drawn on it.
+        self.each(x, z, (4.0 * step).max(8.0), 3.5, true, ask_above, keep, |c| {
             let young = ((c.fresh - 0.55) / 0.45).max(0.0);
             if young == 0.0 {
                 return;
@@ -264,15 +323,10 @@ mod tests {
         let mut wider_than = [0u32; 2];
         for j in 0..cells {
             for i in 0..cells {
-                let cell = hash(i, j, class.salt);
-                for slot in 0..SLOTS {
-                    let h = hash(cell as i32, slot as i32, class.salt);
-                    if bits(h) >= class.chance {
-                        continue;
-                    }
-                    let d = class.d / (1.0 - bits(hash(h as i32, 2, class.salt)) * (15.0 / 16.0)).sqrt();
+                let cell = derive(class, i, j);
+                for c in &cell.craters[..cell.count as usize] {
                     wider_than[0] += 1;
-                    wider_than[1] += (d > 2.0 * class.d) as u32;
+                    wider_than[1] += (c.radius > class.d) as u32;
                 }
             }
         }

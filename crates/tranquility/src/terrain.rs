@@ -29,6 +29,7 @@ use bevy::{
 
 use crate::{
     ground::{self, GroundMaterial, Pattern},
+    quality::Quality,
     origin::Origin,
     world::{Ground, TerrainSettings, WorldDef},
 };
@@ -49,7 +50,7 @@ impl Plugin for TerrainPlugin {
             .add_systems(Startup, setup_material)
             .add_systems(
                 Update,
-                (reset.run_if(crate::world_replaced), finish_chunks, stream_chunks).chain(),
+                (reset.run_if(crate::world_replaced), finish_chunks, stream_chunks, cast.run_if(resource_changed::<Quality>)).chain(),
             );
     }
 }
@@ -72,8 +73,9 @@ pub struct ChunkMeshed {
 #[derive(Resource)]
 pub(crate) struct TerrainMaterial(pub Handle<GroundMaterial>);
 
+/// A chunk of ground, and the level it is on.
 #[derive(Component)]
-pub struct Chunk;
+pub struct Chunk(pub u32);
 
 /// A chunk's level and its place on that level's grid.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -245,6 +247,7 @@ fn finish_chunks(
     world: Res<WorldDef>,
     origin: Res<Origin>,
     material: Res<TerrainMaterial>,
+    quality: Res<Quality>,
     mut meshed: MessageWriter<ChunkMeshed>,
 ) {
     let settings = &world.terrain;
@@ -269,14 +272,14 @@ fn finish_chunks(
         let (lo, hi) = (built.low - sink, built.high);
         let half = size as f32 / 2.0;
         let mut chunk = commands.spawn((
-            Chunk,
+            Chunk(key.level),
             Mesh3d(meshes.add(built.mesh)),
             MeshMaterial3d(material.0.clone()),
             Transform::from_translation(origin.render(corner, 0.0)),
             Aabb::from_min_max(Vec3::new(0.0, lo, 0.0), Vec3::new(2.0 * half, hi, 2.0 * half)),
             bevy::camera::visibility::NoAutoAabb,
         ));
-        if !world.terrain.casts_shadows {
+        if !world.terrain.casts_shadows || key.level > quality.shadow_levels() {
             chunk.insert(NotShadowCaster);
         }
         let entity = chunk.id();
@@ -291,6 +294,17 @@ fn finish_chunks(
             size: size as f32,
             step: settings.step(key.level),
         });
+    }
+}
+
+/// Another quality tier: which levels of the ground cast shadows changes.
+fn cast(mut commands: Commands, world: Res<WorldDef>, quality: Res<Quality>, chunks: Query<(Entity, &Chunk)>) {
+    for (entity, chunk) in &chunks {
+        if world.terrain.casts_shadows && chunk.0 <= quality.shadow_levels() {
+            commands.entity(entity).remove::<NotShadowCaster>();
+        } else {
+            commands.entity(entity).insert(NotShadowCaster);
+        }
     }
 }
 
@@ -337,7 +351,7 @@ fn build_chunk(ground: &dyn Ground, key: Key, size: f64, n: u32) -> Built {
             let normal = Vec3::new(-hx, 2.0 * stepf, -hz).normalize();
             positions.push([i as f32 * stepf, y, j as f32 * stepf]);
             normals.push(normal.to_array());
-            let tint = ground.tint(origin.x + i as f64 * step, origin.y + j as f64 * step, y, normal);
+            let tint = ground.tint_at(origin.x + i as f64 * step, origin.y + j as f64 * step, y, normal, stepf);
             let (a, b, c) = Pattern::from_code(tint.alpha).weights();
             colors.push(tint.with_alpha(c).to_f32_array());
             uv0.push(a);

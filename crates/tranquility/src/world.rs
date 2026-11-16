@@ -36,6 +36,13 @@ pub trait Ground: Send + Sync + 'static {
     /// [`Pattern::Plain`](crate::ground::Pattern::Plain).
     fn tint(&self, x: f64, z: f64, height: f32, normal: Vec3) -> LinearRgba;
 
+    /// The tint for a vertex of a mesh `step` metres apart: a world may
+    /// leave out markings a distant grid cannot show, which is most of the
+    /// cost of colouring it.
+    fn tint_at(&self, x: f64, z: f64, height: f32, normal: Vec3, _step: f32) -> LinearRgba {
+        self.tint(x, z, height, normal)
+    }
+
     /// Where feet come to rest. Defaults to the drawn ground; override it for
     /// things that can be stood on but are not terrain (bridge decks, rocks).
     fn stand_height(&self, x: f64, z: f64) -> f32 {

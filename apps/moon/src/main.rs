@@ -13,6 +13,7 @@ mod body;
 mod craters;
 mod heavens;
 mod rocks;
+mod rover;
 mod suit;
 
 use tranquility::prelude::*;
@@ -50,8 +51,19 @@ fn main() {
     let mut app = tranquility::app(start.world());
     app.insert_resource(Current(start))
         .insert_resource(Catalogue(bodies))
-        .add_plugins((rocks::RocksPlugin, heavens::HeavensPlugin))
         .add_systems(Update, (travel, describe));
+    // MOON_OFF=rocks,heavens,rover leaves parts out, for measuring what
+    // each costs.
+    let off = std::env::var("MOON_OFF").unwrap_or_default();
+    if !off.contains("rocks") {
+        app.add_plugins(rocks::RocksPlugin);
+    }
+    if !off.contains("heavens") {
+        app.add_plugins(heavens::HeavensPlugin);
+    }
+    if !off.contains("rover") {
+        app.add_plugins(rover::RoverPlugin);
+    }
     app.run();
 }
 
@@ -88,5 +100,5 @@ fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>,
         b.note,
     );
     let names: Vec<String> = bodies.0.iter().enumerate().map(|(k, b)| format!("{} {}", (k + 1) % 10, b.name)).collect();
-    hud.keys = names.join("  ");
+    hud.keys = format!("{}{}", if b.rover { "R: drive the rover\n" } else { "" }, names.join("  "));
 }

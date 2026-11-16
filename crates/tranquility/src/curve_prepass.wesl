@@ -1,12 +1,15 @@
 // The prepass vertex shader of bevy_pbr (depth, motion vectors, and the
-// sun's shadow maps) with the same curve as `curve_vertex.wesl`: the drop is
-// measured from the camera in every pass, so shadows fall where the ground
-// is drawn.
+// sun's shadow maps) with the same curve as `curve_vertex.wesl`, in the
+// camera's own passes only. The sun's shadow maps are drawn flat: their
+// views do not know where the camera is, and the fragment shaders look
+// shadows up at the flat position (see `rise` in `ground.wesl` and
+// `curve_fragment.wesl`), so lit and shadowed still meet where they should.
 
 import bevy_pbr::{
     prepass::io::{Vertex, VertexOutput, decompress_vertex},
     render::{
         mesh_functions,
+        mesh_view_bindings::view,
         view_transformations::position_world_to_clip,
     },
 };
@@ -18,7 +21,11 @@ struct Curve {
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> curve: Curve;
 
 fn sink(world: vec4<f32>) -> vec4<f32> {
-    let d = world.xz - curve.at.xy;
+    // An orthographic view is the sun's.
+    if view.clip_from_view[3][3] == 1.0 {
+        return world;
+    }
+    let d = world.xz - view.world_position.xz;
     let d2 = dot(d, d);
     let k = curve.at.z;
     return vec4(world.x, world.y - d2 * k * (1.0 + d2 * k * k), world.z, world.w);

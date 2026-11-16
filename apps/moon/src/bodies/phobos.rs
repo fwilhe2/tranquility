@@ -59,13 +59,17 @@ impl Ground for Phobos {
         swell + self.grooves(x, z) + self.craters.height(x, z, step, f32::MAX, &|_, _| true)
     }
 
-    fn tint(&self, x: f64, z: f64, _height: f32, normal: Vec3) -> LinearRgba {
+    fn tint(&self, x: f64, z: f64, height: f32, normal: Vec3) -> LinearRgba {
+        self.tint_at(x, z, height, normal, 0.0)
+    }
+
+    fn tint_at(&self, x: f64, z: f64, _height: f32, normal: Vec3, step: f32) -> LinearRgba {
         // Two units: the red one that covers most of it, and a bluer,
         // fresher one in patches (round Stickney, in life).
         let blue = smoothstep(0.1, 0.4, fbm(x, z, 1500.0, 4, 0.5, 84));
         let mottle = 1.0 + 0.12 * fbm(x, z, 200.0, 4, 0.5, 85);
         let slope = (1.0 - normal.y).clamp(0.0, 0.3) / 0.3;
-        let rays = self.craters.ejecta(x, z, f32::MAX, &|_, _| true);
+        let rays = self.craters.ejecta(x, z, step, f32::MAX, &|_, _| true);
         let a = 0.068 * mottle * (1.0 + 0.25 * slope + 0.35 * rays) * (1.0 + 0.15 * blue);
         let c = Vec3::new(1.1, 1.0, 0.88).lerp(Vec3::new(1.02, 1.0, 0.97), blue) * a;
         Pattern::Regolith.on(LinearRgba::rgb(c.x, c.y, c.z))
