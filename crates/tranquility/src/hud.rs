@@ -39,6 +39,10 @@ pub struct Hud {
 #[derive(Component)]
 struct Overlay;
 
+/// The overlay's typeface, for an app's own text.
+#[derive(Resource, Clone)]
+pub struct HudFont(pub Handle<Font>);
+
 #[derive(Component)]
 struct Status {
     frames: u32,
@@ -64,8 +68,10 @@ fn shadow() -> TextShadow {
 const FONT: &[u8] = include_bytes!("../assets/fonts/LiberationSans-Regular.ttf");
 
 fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
+    let handle = fonts.add(Font::from_bytes(FONT.to_vec()));
+    commands.insert_resource(HudFont(handle.clone()));
     let font = TextFont {
-        font: fonts.add(Font::from_bytes(FONT.to_vec())).into(),
+        font: handle.into(),
         font_size: FontSize::Px(15.0),
         ..default()
     };

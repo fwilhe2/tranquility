@@ -53,7 +53,7 @@ pub struct StrollPlugin;
 impl Plugin for StrollPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Stroll>()
-            .add_systems(Startup, setup)
+            .add_systems(PostStartup, setup)
             .add_systems(Update, ((switch, guide, lens).chain().after(Walking), creep, caption));
     }
 }
@@ -360,7 +360,7 @@ struct Veil;
 #[derive(Component)]
 struct Caption(u8);
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, font: Res<tranquility::hud::HudFont>) {
     commands.spawn((
         Veil,
         Node { position_type: PositionType::Absolute, left: px(0), right: px(0), top: px(0), bottom: px(0), ..default() },
@@ -371,7 +371,7 @@ fn setup(mut commands: Commands) {
         (
             Caption(k),
             Text::new(""),
-            TextFont { font_size: FontSize::Px(size), ..default() },
+            TextFont { font: font.0.clone().into(), font_size: FontSize::Px(size), ..default() },
             TextColor(Color::NONE),
             TextLayout::justify(Justify::Center),
             Node { position_type: PositionType::Absolute, left: px(0), right: px(0), bottom: percent(bottom), ..default() },

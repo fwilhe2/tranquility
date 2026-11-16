@@ -38,18 +38,73 @@ make shot APP=potsdam OUT=shot.png POSE=-200,260,500,0,-0.45 HOUR=16.5
 for a fixed sun, `TRANQUILITY_SUN=elevation` does the same. The frame is saved
 once the terrain has streamed in, then the app quits.
 
+On Linux, sound needs ALSA's headers (`alsa-lib-devel` on Fedora,
+`libasound2-dev` on Debian and Ubuntu).
+
+GitHub Actions (`.github/workflows/ci.yml`) runs clippy and the tests on
+every push and pull request, and builds the three browser apps on `main`
+(kept as the `web` artifact for two weeks). Compiled dependencies are
+cached, so a run takes about five minutes.
+
 ## Controls
 
 Click to capture the mouse, **Esc** to let it go. **WASD** walk, **Shift**
 faster, **Space** jump, **F** fly (**Space**/**C** up and down), **[ ]** sun
 (time of day, or elevation for a fixed sun), **B** air on/off, **Q** quality
-tier, **H** hide text.
+tier, **M** sound, **H** hide text.
 
 In `moon`: **1**–**9** change body (`make run APP=moon` starts on the Moon;
 `TRANQUILITY_BODY=mars` or a first argument picks another), **R** climbs
 into the rover parked by the landing site and out again, **V** changes
 between its seat and a camera behind. On Phobos and Enceladus, where nobody
 walks, the movement keys fire suit jets while you are off the ground.
+**0** starts the stroll (below); `MOON_STROLL=1` starts in it.
+
+## The stroll
+
+Press **0** and the walk walks itself, for watching or recording: a calm,
+endless walk on any of the nine bodies.
+
+- **The head faces the planet.** The Earth from the Moon, Mars from
+  Phobos, Jupiter from Io and Europa, Saturn from Enceladus, Charon from
+  Pluto: whatever hangs in the sky is held in the frame above a low
+  horizon, and stays there. Where nothing hangs (Mercury, Mars, Titan) it
+  faces the highest skyline in reach, the sun to one side.
+- **Nothing moves fast.** No bob, no roll, no swinging round: the head
+  eases toward its aim like a heavy camera on a fluid head, and the lens
+  is a little longer than the walker's own.
+- **The feet go that way too**, at a walk, never a run or a jump, and
+  round what is in the way: a few times a second it weighs some thirty
+  bearings over the next forty metres for slope, boulders, the rover and
+  the sea, and drifts onto the best. On Phobos, where nobody walks, it
+  floats two metres up on the suit's jets.
+- **It holds no privileges.** It pushes the same stick a player does, so
+  grip, slopes, rocks and the streaming ground answer as they would to a
+  pair of hands. Any movement key hands the legs back.
+- **The sun creeps**, a degree every two minutes, back and forth: on an
+  airless world the shadows are the scenery. Your own shadow walks with
+  you, legs swinging.
+- The text goes; the picture comes up out of black and the body's name
+  fades in and out.
+
+## Sound
+
+There is no sound from outside on an airless body: nothing carries it.
+What you hear comes through the suit, as on Apollo: the backpack's fans
+and pump, which never stop; your own breathing in the helmet, quickening
+as you work and slowing back over half a minute; each boot striking the
+ground, carried up through your bones as a dead thud with the grit of the
+soil in it, and the suit's layers working as the leg swings through; the
+jets hissing through the backpack frame; the rover's hub motors through
+the seat.
+
+Where there is air it carries what it can, from the body's air density
+and wind alone: on Mars six millibars of carbon dioxide bring the grit
+and the motors faintly and dully, and the wind is a rumble at the edge of
+hearing; Titan's air, four times as dense as ours, carries everything,
+and its winds are slow. Everything is synthesised as it plays; nothing is
+loaded. **M** mutes. Screenshot and benchmark runs are silent, and
+`MOON_SOUND_WAV=out.wav` renders a minute of a body's sound to a file.
 
 ## The moon app
 
@@ -132,6 +187,14 @@ or trees, is the app's own Bevy systems.
 - `facade`: a `StandardMaterial` extension whose WESL shader draws window bays,
   sashes, shopfronts, storey bands and a plinth from per-vertex parameters
   written by `Massing`.
+- `horizon`: shadows beyond the sun's shadow maps. The ground round the
+  camera is kept as a wide, coarse height map (32 km), and the ground
+  shader marches toward the sun through it where the cascades fade out:
+  under a low sun crater floors and the far sides of massifs fall into
+  shadow at any distance (`TerrainSettings::far_shadows`).
+- `sound`: synthesised sound through Bevy's audio. A voice is a function
+  from time to a stereo sample, built from noise, filters, glides and
+  oscillators; no files, no decoders.
 - `hud`, `tools`: overlay text (apps can add a line); screenshot and pose
   hooks.
 
@@ -169,13 +232,14 @@ What this covers, and what they have that the engine does not (yet):
 - **Shared**: one height function as the single source of truth (meshing jobs
   and walker agree), chunk streaming with LOD, a sun path, sky and exposure,
   walk and fly, quality tiers, sub-metre ground detail in the shader.
-- **lunar-walk** has more: twenty-one bodies to these nine, terrain horizon
-  shadows (here the ground casts into the ordinary cascades, so crater
-  shadows end at the shadow distance), full Hapke photometry, micro-craters
-  traced in the ground shader, footprints, solid rocks, landers, eye
-  adaptation, night by planetshine, effects (plumes, geysers, dust devils),
-  sound. Here now: nested levels with curvature, the rover with tracks and
-  dust, companions in the sky, other atmospheres.
+- **lunar-walk** has more: twenty-one bodies to these nine, full Hapke
+  photometry, micro-craters traced in the ground shader, solid rocks you
+  can stand on, landers, eye adaptation, night by planetshine, effects
+  (plumes, geysers, dust devils), a demo that tours the bodies and drives
+  the rover. Shared now: terrain shadows at any range, footprints, sound
+  through the suit, a walk that walks itself. Here only: nested levels
+  with curvature, the rover with tracks and dust, companions in the sky,
+  other atmospheres, the walker's shadow.
 - **historical-walk** has more: ground textures laid along street frames
   (patterns here are world-aligned, and street edges are as soft as the 1 m
   vertex colours), the traced kerb, sky-view occlusion on walls, facade relief
