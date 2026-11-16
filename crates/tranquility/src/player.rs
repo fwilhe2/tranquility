@@ -28,6 +28,11 @@ const LOOK_SENSITIVITY: f32 = 0.0022;
 
 pub struct PlayerPlugin;
 
+/// The systems that turn and move the walker. Whatever steers it through
+/// [`Player::steer`] or takes its head runs before or after this.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Walking;
+
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, spawn).add_systems(
@@ -38,9 +43,21 @@ impl Plugin for PlayerPlugin {
                 look,
                 (toggle_fly, walk).chain(),
             )
-                .chain(),
+                .chain()
+                .in_set(Walking),
         );
     }
+}
+
+/// What something other than the keyboard asks of the walker: an app that
+/// walks by itself holds the stick here, and everything downstream (grip,
+/// slopes, collisions) answers as it would to a pair of hands.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct Steer {
+    /// Which way to go, in render space, and how hard: length 1 is the full
+    /// pace. `y` is up and down where that means something (flying, suit
+    /// jets; pushing up on jets also lifts the feet off the ground).
+    pub go: Vec3,
 }
 
 #[derive(Component)]
@@ -56,6 +73,10 @@ pub struct Player {
     pub grounded: bool,
     /// Height of the feet; the eye follows it, eased if the world asks.
     pub feet: f32,
+    /// Added to what the keys ask.
+    pub steer: Steer,
+    /// How hard the suit's jets are firing, 0–1 (more with Shift).
+    pub thrust: f32,
 }
 
 impl Player {
@@ -86,6 +107,8 @@ fn start(world: &WorldDef, origin: &Origin) -> (Player, Transform) {
         velocity: Vec3::ZERO,
         grounded: true,
         feet: floor,
+        steer: Steer::default(),
+        thrust: 0.0,
     };
     // TRANQUILITY_POSE="x,y,z,yaw,pitch" starts there, flying.
     if let Some([x, y, z, yaw, pitch]) = crate::tools::env_floats::<5>("TRANQUILITY_POSE") {
@@ -207,7 +230,11 @@ fn walk(
     };
 
     let axis = |pos: KeyCode, neg: KeyCode| keys.pressed(pos) as i32 as f32 - keys.pressed(neg) as i32 as f32;
-    let mut wish = forward * axis(KeyCode::KeyW, KeyCode::KeyS) + right * axis(KeyCode::KeyD, KeyCode::KeyA);
+    let steer = player.steer.go;
+    let mut wish = forward * axis(KeyCode::KeyW, KeyCode::KeyS) + right * axis(KeyCode::KeyD, KeyCode::KeyA) + Vec3::new(steer.x, 0.0, steer.z);
+    // Up and down, where there is such a thing.
+    let lift = axis(KeyCode::Space, KeyCode::KeyC) + steer.y;
+    player.thrust = 0.0;
     // TRANQUILITY_WALK=back (or forward) walks by itself, for screenshots
     // of what walking leaves behind.
     match std::env::var("TRANQUILITY_WALK").as_deref() {
@@ -219,9 +246,9 @@ fn walk(
     let floor_at = |p: Vec3| feet_floor(&world, origin.world(p));
 
     if player.flying {
-        wish += Vec3::Y * axis(KeyCode::Space, KeyCode::KeyC);
+        wish += Vec3::Y * lift;
         let speed = if fast { w.fly_fast } else { w.fly };
-        transform.translation += wish.normalize_or_zero() * speed * dt;
+        transform.translation += wish.clamp_length_max(1.0) * speed * dt;
         let floor = floor_at(transform.translation) + w.eye_height;
         transform.translation.y = transform.translation.y.max(floor);
         player.feet = transform.translation.y - w.eye_height;
@@ -233,10 +260,16 @@ fn walk(
     let here = Vec2::new(p.x, p.z);
     let floor_here = floor_at(p);
     let pace = if fast { w.run } else { w.walk };
-    let target = wish.normalize_or_zero() * pace;
+    // Half a stick is half the pace.
+    let target = wish.clamp_length_max(1.0) * pace;
     let mut v = player.velocity;
     let mut flat = Vec2::new(v.x, v.z);
 
+    if player.grounded && w.jets > 0.0 && steer.y > 0.0 {
+        // Jets lift a standing body off without a leap.
+        player.grounded = false;
+        v.y = 0.0;
+    }
     if player.grounded {
         // The slope under the feet, and the pull of gravity along it.
         let e = 0.4;
@@ -260,8 +293,9 @@ fn walk(
         }
         if w.jets > 0.0 {
             // Suit jets: the keys are thrust, not a pace.
-            let thrust = wish + Vec3::Y * axis(KeyCode::Space, KeyCode::KeyC);
-            let a = thrust.normalize_or_zero() * w.jets * if fast { 3.0 } else { 1.0 };
+            let thrust = (wish + Vec3::Y * lift).clamp_length_max(1.0) * if fast { 3.0 } else { 1.0 };
+            player.thrust = thrust.length();
+            let a = thrust * w.jets;
             flat += Vec2::new(a.x, a.z) * dt;
             v.y += a.y * dt;
         }
@@ -273,14 +307,17 @@ fn walk(
     }
 
     // Slide along whatever blocks the way, one axis at a time.
+    // Someone already inside something (set down there, or it appeared
+    // round them) walks out of it.
     let step = flat * dt;
     let mut next = here;
-    if blocked(ground, &origin, next + Vec2::new(step.x, 0.0), w.radius) {
+    let free = !blocked(ground, &origin, here, w.radius);
+    if free && blocked(ground, &origin, next + Vec2::new(step.x, 0.0), w.radius) {
         flat.x = 0.0;
     } else {
         next.x += step.x;
     }
-    if blocked(ground, &origin, next + Vec2::new(0.0, step.y), w.radius) {
+    if free && blocked(ground, &origin, next + Vec2::new(0.0, step.y), w.radius) {
         flat.y = 0.0;
     } else {
         next.y += step.y;

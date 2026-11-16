@@ -31,7 +31,13 @@ pub struct Hud {
     /// Replaces WALK/FLY in the status line while the app has the player
     /// doing something else (driving).
     pub mode: String,
+    /// No text at all: `H`, or an app that wants a clean picture.
+    pub hidden: bool,
 }
+
+/// The overlay's own text, as against anything else an app writes.
+#[derive(Component)]
+struct Overlay;
 
 #[derive(Component)]
 struct Status {
@@ -77,6 +83,7 @@ fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
         TextColor(Color::srgba(1.0, 1.0, 1.0, 0.85)),
         shadow(),
         at(Some(10.0), None),
+        Overlay,
         Status {
             frames: 0,
             elapsed: 0.0,
@@ -89,6 +96,7 @@ fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
         TextColor(Color::srgba(1.0, 0.95, 0.85, 0.9)),
         shadow(),
         at(Some(30.0), None),
+        Overlay,
         Info,
     ));
     commands.spawn((
@@ -97,6 +105,7 @@ fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
         TextColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
         shadow(),
         at(None, Some(10.0)),
+        Overlay,
         Help,
     ));
 }
@@ -152,7 +161,7 @@ fn update(
         }
         let keys = format!(
             "click: capture mouse   WASD: walk   Shift: faster   Space: jump   F: fly (Space/C up/down)\n\
-             [ ]: sun   B: air on/off   Q: quality   H: hide text   Esc: release mouse{}",
+             [ ]: sun   B: air on/off   Q: quality   M: sound   H: hide text   Esc: release mouse{}",
             if hud.keys.is_empty() { String::new() } else { format!("   {}", hud.keys) }
         );
         if help.0 != keys {
@@ -162,10 +171,12 @@ fn update(
 }
 
 /// `H` hides and shows all text.
-fn toggle(keys: Res<ButtonInput<KeyCode>>, mut nodes: Query<&mut Visibility, With<Text>>) {
+fn toggle(keys: Res<ButtonInput<KeyCode>>, mut hud: ResMut<Hud>, mut nodes: Query<&mut Visibility, With<Overlay>>) {
     if keys.just_pressed(KeyCode::KeyH) {
-        for mut v in &mut nodes {
-            v.toggle_visible_hidden();
-        }
+        hud.hidden = !hud.hidden;
+    }
+    let show = if hud.hidden { Visibility::Hidden } else { Visibility::Inherited };
+    for mut v in &mut nodes {
+        v.set_if_neq(show);
     }
 }

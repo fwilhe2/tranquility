@@ -38,6 +38,7 @@ pub mod origin;
 pub mod player;
 pub mod quality;
 pub mod sky;
+pub mod sound;
 pub mod terrain;
 pub mod tools;
 pub mod vehicle;
@@ -53,7 +54,7 @@ pub mod prelude {
         ground::{Pattern, PropMaterial},
         origin::{Origin, OriginShifted},
         hud::Hud,
-        player::Player,
+        player::{Player, Steer, Walking},
         sky::Sun,
         terrain::{ChunkMeshed, ground, hash, hash2, unit},
         world::{
@@ -80,6 +81,7 @@ impl Plugin for EnginePlugin {
             facade::FacadePlugin,
             ground::GroundPlugin,
             quality::QualityPlugin,
+            sound::SoundPlugin,
         ));
     }
 }

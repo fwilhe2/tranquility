@@ -5,7 +5,7 @@
 //!   `TRANQUILITY_SUN=12` the elevation (fixed sun).
 //! - `TRANQUILITY_WALK=forward|back` walks by itself.
 //! - `TRANQUILITY_SCREENSHOT=out.png` saves one frame once the terrain has
-//!   streamed in, then quits.
+//!   streamed in, then quits; `TRANQUILITY_SHOT_AFTER=seconds` waits longer.
 //! - `TRANQUILITY_BENCH=10` measures frame times for that many seconds once
 //!   the terrain has streamed in, prints them, then quits.
 
@@ -124,13 +124,16 @@ mod screenshot {
             return;
         }
         let settled = *settled_at.get_or_insert(t);
-        if !shot.taken && t > settled + 2.0 {
+        // TRANQUILITY_SHOT_AFTER=30 waits that much longer: for a scene
+        // that has to play a while first.
+        let wait = 2.0 + crate::tools::env_f32("TRANQUILITY_SHOT_AFTER").unwrap_or(0.0);
+        if !shot.taken && t > settled + wait {
             commands
                 .spawn(Screenshot::primary_window())
                 .observe(save_to_disk(shot.path.clone()));
             shot.taken = true;
         }
-        if t > settled + 4.0 {
+        if t > settled + wait + 2.0 {
             exit.write(AppExit::Success);
         }
     }
