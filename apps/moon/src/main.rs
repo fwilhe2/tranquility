@@ -71,15 +71,18 @@ fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>,
     }
     let b = &current.0;
     let w = &world.walker;
-    let g = if b.gravity < 1.0 { format!("{:.2}", b.gravity) } else { format!("{:.1}", b.gravity) };
+    let g = if b.gravity < 0.1 { format!("{:.4}", b.gravity) } else if b.gravity < 1.0 { format!("{:.2}", b.gravity) } else { format!("{:.1}", b.gravity) };
+    let share = b.gravity / 9.81 * 100.0;
+    let share = if share < 1.0 { format!("{share:.2}") } else { format!("{share:.0}") };
+    let metres = |v: f32| if v < 0.1 { format!("{:.0} cm/s", v * 100.0) } else { format!("{v:.1} m/s") };
     hud.info = format!(
-        "{} · {} m/s² ({:.0} % of Earth's) · sun at {:.1} AU · walk {:.1} m/s, lope {:.1} m/s, a jump {:.1} m high{}\n{}",
+        "{} · {} m/s² ({} % of Earth's) · sun at {:.1} AU · walk {}, lope {}, a jump {:.1} m high{}\n{}",
         b.site,
         g,
-        b.gravity / 9.81 * 100.0,
+        share,
         b.au,
-        w.walk,
-        w.run,
+        metres(w.walk),
+        metres(w.run),
         w.jump * w.jump / (2.0 * w.gravity),
         if w.jets > 0.0 { " · suit jets in flight" } else { "" },
         b.note,

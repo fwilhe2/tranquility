@@ -111,6 +111,50 @@ pub struct Body {
 const SUN_LUX: f32 = 133_000.0;
 
 impl Body {
+    /// An airless body of grey regolith under a black sky, the Moon's
+    /// numbers for everything not given: the starting point for a row.
+    pub fn airless(name: &'static str, site: &'static str, land: Arc<dyn Land>) -> Self {
+        Self {
+            name,
+            site,
+            note: "",
+            gravity: 1.62,
+            radius: 1_737_400.0,
+            au: 1.0,
+            albedo: 0.11,
+            grip: 0.65,
+            land,
+            soil: Soil::default(),
+            roughness: 0.98,
+            reflectance: 0.2,
+            air: Air::None,
+            drag: 0.0,
+            sun: (100.0, 14.0),
+            stars: 900.0,
+            fill: 1.0,
+            fill_color: Color::WHITE,
+            exposure_bias: 0.0,
+            sea: None,
+            rocks: Rocks::default(),
+            companions: Vec::new(),
+            sun_disc: true,
+            levels: 8,
+            look: (0.5, -0.1),
+            rover: true,
+        }
+    }
+
+    /// Angular radius of the sun's disc from here, degrees.
+    pub fn sun_radius(&self) -> f32 {
+        0.267 / self.au
+    }
+
+    /// Whether the air's own sun disc is the one to show: there is air,
+    /// and the disc is more than a pixel.
+    pub fn sky_draws_sun(&self) -> bool {
+        !self.air.is_none() && self.sun_disc && self.sun_radius() >= crate::heavens::SMALLEST
+    }
+
     /// Sunlight at the top of the air, lux.
     pub fn sunlight(&self) -> f32 {
         SUN_LUX / (self.au * self.au)
@@ -148,7 +192,7 @@ impl Body {
                 ambient_color: self.fill_color,
                 exposure,
                 sun_illuminance: sunlight,
-                sun_radius: 0.267 / self.au,
+                sun_radius: if self.sky_draws_sun() { self.sun_radius() } else { 0.0 },
                 ..default()
             },
             water: self.sea.clone(),

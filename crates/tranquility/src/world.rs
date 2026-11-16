@@ -139,6 +139,9 @@ pub struct Soil {
     pub ripples: f32,
     /// Pebbles and small stones lying on the surface, 0–1.
     pub pebbles: f32,
+    /// How bright those stones are beside the soil they lie on: 1 the
+    /// same, less for dark rock on bright dust.
+    pub pebble_tone: f32,
     /// Glints from crystal faces: frost and clean ice.
     pub sparkle: f32,
     /// 0 scatters like a matte surface (Lambert), 1 like a porous powder
@@ -162,6 +165,7 @@ impl Default for Soil {
             grain: 1.0,
             ripples: 0.0,
             pebbles: 0.3,
+            pebble_tone: 1.0,
             sparkle: 0.0,
             powder: 1.0,
             surge: 1.0,
@@ -241,6 +245,10 @@ pub struct AirDef {
     /// The gases, hazes and dust: what each absorbs and scatters, how it
     /// thins with height and where it sends the light.
     pub medium: ScatteringMedium,
+    /// March every view ray through the air instead of looking the answer
+    /// up in tables: slower, but under air many optical depths thick the
+    /// tables run out of precision and draw lines across the ground.
+    pub thick: bool,
 }
 
 #[derive(Clone, Copy)]

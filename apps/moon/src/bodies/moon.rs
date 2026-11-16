@@ -112,33 +112,11 @@ impl Land for Moon {
 
 pub fn body() -> Body {
     Body {
-        name: "Moon",
-        site: "Mare margin",
         note: "The highlands to the north are kilometres high and further than they look: nothing in the vacuum says how far.",
-        gravity: 1.62,
-        radius: 1_737_400.0,
-        au: 1.0,
-        albedo: 0.11,
-        grip: 0.65,
-        land: Arc::new(Moon::new()),
-        soil: Soil::default(),
-        roughness: 0.98,
-        reflectance: 0.2,
-        air: Air::None,
-        drag: 0.0,
-        sun: (100.0, 14.0),
-        stars: 900.0,
-        fill: 1.0,
-        fill_color: Color::WHITE,
-        exposure_bias: 0.0,
-        sea: None,
         rocks: Rocks { density: 0.12, largest: 5.0, albedo: [0.1, 0.17], tint: [1.03, 1.0, 0.95], ..default() },
         // The Earth, four times the size the Moon shows us, hardly moves
         // in the lunar sky.
         companions: vec![Companion::new(Map::Earth, 0.95, 322.0, 21.0)],
-        sun_disc: true,
-        levels: 8,
-        look: (0.5, -0.1),
-        rover: true,
+        ..Body::airless("Moon", "Mare margin", Arc::new(Moon::new()))
     }
 }

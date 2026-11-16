@@ -46,7 +46,7 @@ struct GroundParams {
     soil_a: Vec4,
     /// Sparkle, powder, surge, surge width.
     soil_b: Vec4,
-    /// Backscatter.
+    /// Backscatter, pebble tone.
     soil_c: Vec4,
 }
 
@@ -109,7 +109,7 @@ pub(crate) fn material(terrain: &TerrainSettings) -> GroundMaterial {
                 origin: IVec4::ZERO,
                 soil_a: Vec4::new(s.craterlets, s.grain, s.ripples, s.pebbles),
                 soil_b: Vec4::new(s.sparkle, s.powder, s.surge, s.surge_width.max(1e-3)),
-                soil_c: Vec4::new(s.backscatter, 0.0, 0.0, 0.0),
+                soil_c: Vec4::new(s.backscatter, s.pebble_tone, 0.0, 0.0),
             },
         },
     }

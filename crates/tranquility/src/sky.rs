@@ -10,6 +10,7 @@ use bevy::{
         Atmosphere, DirectionalLightShadowMap, Skybox, SunDisk,
         atmosphere::ScatteringMedium,
     },
+    pbr::{AtmosphereMode, AtmosphereSettings},
     prelude::*,
     render::render_resource::{
         Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
@@ -147,7 +148,13 @@ fn dress_camera(
     if !world.is_changed() && new.is_empty() {
         return;
     }
+    let thick = matches!(&world.sky.air, Air::Medium(def) if def.thick);
     for camera in &cameras {
+        commands.entity(camera).insert(AtmosphereSettings {
+            rendering_method: if thick { AtmosphereMode::Raymarched } else { AtmosphereMode::LookupTexture },
+            sky_max_samples: 12,
+            ..default()
+        });
         if world.sky.stars > 0.0 {
             commands.entity(camera).insert(Skybox {
                 image: Some(stars.0.clone()),

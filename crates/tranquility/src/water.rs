@@ -1,9 +1,12 @@
-//! A water surface at one level: one big plane kept centred under the camera.
+//! A water surface at one level: one big sheet kept centred under the camera.
 //! The ground below it is whatever the world's height function says.
 
 use bevy::prelude::*;
 
-use crate::world::WorldDef;
+use crate::{
+    ground::{PropMaterial, prop},
+    world::WorldDef,
+};
 
 pub struct WaterPlugin;
 
@@ -20,7 +23,7 @@ fn setup(
     mut commands: Commands,
     world: Res<WorldDef>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<PropMaterial>>,
     old: Query<Entity, With<Water>>,
 ) {
     for entity in &old {
@@ -32,13 +35,15 @@ fn setup(
     let extent = world.terrain.reach() * 1.5;
     commands.spawn((
         Water,
-        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(extent)))),
-        MeshMaterial3d(materials.add(StandardMaterial {
+        // A grid, not one quad: on a round world the sea curves away
+        // with the ground, vertex by vertex.
+        Mesh3d(meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(extent)).mesh().subdivisions(127))),
+        MeshMaterial3d(materials.add(prop(StandardMaterial {
             base_color: water.color,
             perceptual_roughness: water.roughness,
             reflectance: 0.5,
             ..default()
-        })),
+        }))),
         Transform::from_xyz(0.0, water.level, 0.0),
     ));
 }

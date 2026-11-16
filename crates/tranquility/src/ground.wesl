@@ -28,7 +28,7 @@ struct Ground {
     soil_a: vec4<f32>,
     // Sparkle, powder, surge, surge width.
     soil_b: vec4<f32>,
-    // Backscatter.
+    // Backscatter, pebble tone.
     soil_c: vec4<f32>,
 }
 
@@ -222,17 +222,15 @@ fn pebbles(l: Lattice, salt: u32, density: f32, sun: Sun) -> Pebbles {
                 // Half buried: a low dome.
                 out.bend = d / max(dist, 1e-4) * 0.8 * x / sqrt(1.08 - x * x);
                 out.cover = 1.0 - smoothstep(0.85, 1.0, x);
-                out.tone = 0.8 + 0.55 * fract(k * 91.0);
+                out.tone = ground.soil_c.y * (0.8 + 0.45 * fract(k * 91.0));
             } else {
-                // Down-sun of it: a shadow as wide as the stone, running
-                // as far as its height and the sun's make it, to a point.
-                let along = -dot(d, sun.along);
-                let len = r * (0.45 * sun.reach + 1.0);
-                if along > 0.0 && along < len {
-                    let across = length(d + sun.along * along);
-                    let width = r * sqrt(1.0 - along / len);
-                    out.shade = max(out.shade, 1.0 - smoothstep(0.75 * width, width, across));
-                }
+                // Down-sun of it: its shadow, an ellipse as wide as the
+                // stone and as long as its height and the sun's make it.
+                let len = r * (1.0 + 0.5 * sun.reach);
+                let along = -dot(d, sun.along) - 0.5 * len;
+                let across = length(d + sun.along * dot(d, sun.along));
+                let e = length(vec2(along / (0.5 * len + 0.6 * r), across / (0.95 * r)));
+                out.shade = max(out.shade, 1.0 - smoothstep(0.7, 1.0, e));
             }
         }
     }
@@ -476,8 +474,10 @@ fn soil(p: vec2<f32>, colour: vec3<f32>, roughness: f32, pixel: f32, to_sun: vec
 
     if sparkle > 0.0 && to_sun.y > 0.0 {
         // Crystal faces that happen to mirror the sun into the eye: which
-        // ones changes with every step, so the ground twinkles as you move.
-        // The cells grow with distance, so there is about one to a pixel.
+        // ones changes with every step, so the ground twinkles as you
+        // move, and there are more of them toward the sun, where a face
+        // needs less of a tilt to do it. The cells grow with distance, so
+        // there is about one to a pixel.
         var num = 256;
         if pixel > 0.03 {
             num = 16;
@@ -485,10 +485,14 @@ fn soil(p: vec2<f32>, colour: vec3<f32>, roughness: f32, pixel: f32, to_sun: vec
             num = 64;
         }
         let l = lattice(p, num, 1);
-        let turn = dot(v, vec3(37.1, 17.7, 29.3)) + dot(to_sun, vec3(11.0, 5.0, 7.0));
+        let mirror = max(dot(reflect(-to_sun, vec3(0.0, 1.0, 0.0)), v), 0.0);
+        let chance = 0.006 + 0.07 * pow(mirror, 5.0);
+        // In steps, so the antialiasing's sub-pixel jitter of the view
+        // does not make every glint flicker.
+        let turn = floor(dot(v, vec3(37.1, 17.7, 29.3)) * 4.0) * 0.25;
         let face = fract(ihash(l.cell, 61u) + turn);
-        let glint = smoothstep(0.985, 1.0, face) * (1.0 - smoothstep(0.1, 0.5, pixel));
-        d.colour += vec3(3.0 * sparkle * glint * (1.0 - shade));
+        let glint = step(1.0 - chance, face) * (1.0 - smoothstep(0.1, 0.5, pixel));
+        d.colour += vec3(2.5 * sparkle * glint * (1.0 - shade));
     }
     return d;
 }

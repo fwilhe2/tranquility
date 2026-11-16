@@ -24,7 +24,7 @@ use crate::Current;
 const DISTANCE: f32 = 37_000.0;
 /// A disc smaller than this (degrees) would flicker between pixels: it is
 /// drawn this size and dimmed to the same total light.
-const SMALLEST: f32 = 0.11;
+pub const SMALLEST: f32 = 0.11;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Map {
@@ -93,7 +93,8 @@ struct Globe {
 
 fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
     let globe = Globe {
-        fine: meshes.add(Sphere::new(1.0).mesh().uv(128, 64)),
+        // Bevy's UV sphere has its poles on z; the maps want them on y.
+        fine: meshes.add(Sphere::new(1.0).mesh().uv(128, 64).rotated_by(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))),
         coarse: meshes.add(Sphere::new(1.0).mesh().ico(3).expect("valid subdivision")),
         sun: materials.add(StandardMaterial { base_color: Color::BLACK, ..default() }),
     };
@@ -116,7 +117,6 @@ fn size(degrees: f32) -> Vec3 {
 fn populate(
     mut commands: Commands,
     current: Res<Current>,
-    world: Res<WorldDef>,
     globe: Res<Globe>,
     mut maps: ResMut<Maps>,
     mut images: ResMut<Assets<Image>>,
@@ -133,17 +133,26 @@ fn populate(
     // The Sun's surface is as bright from Pluto as from Mercury, only
     // smaller: far beyond white at any exposure, and the bloom makes the
     // glare. Under air the sky draws its own disc, dimmed by the air.
-    let true_radius = world.sky.sun_radius;
+    let true_radius = body.sun_radius();
     let drawn = true_radius.max(SMALLEST);
     let dim = (true_radius / drawn).powi(2);
     if let Some(mut material) = materials.get_mut(&globe.sun) {
         material.emissive = LinearRgba::rgb(4.0e6, 3.8e6, 3.5e6) * dim;
     }
     disc.0.scale = size(drawn);
-    *disc.1 = if body.air.is_none() && body.sun_disc { Visibility::Inherited } else { Visibility::Hidden };
+    *disc.1 = if body.sun_disc && !body.sky_draws_sun() { Visibility::Inherited } else { Visibility::Hidden };
 
     for c in &body.companions {
-        let rotation = Quat::from_euler(EulerRot::ZYX, c.turn[0], c.turn[1], c.turn[2]);
+        let mut rotation = Quat::from_euler(EulerRot::ZYX, c.turn[0], c.turn[1], c.turn[2]);
+        if c.rings.is_some() {
+            // A moon in the ring plane sees the rings edge-on: the pole
+            // stands square to the line of sight, a hair off so the rings
+            // keep a pixel's width.
+            let dir = c.direction();
+            let across = Vec3::Y.cross(dir).normalize_or(Vec3::X);
+            let pole = Quat::from_axis_angle(across, 0.3f32.to_radians()) * dir.cross(across);
+            rotation = Quat::from_rotation_arc(Vec3::Y, pole.normalize()) * Quat::from_rotation_y(c.turn[1]);
+        }
         let drawn = c.radius.max(SMALLEST);
         let dim = (c.radius / drawn).powi(2);
         let material = match c.map {
