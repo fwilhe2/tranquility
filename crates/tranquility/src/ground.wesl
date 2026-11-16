@@ -30,9 +30,48 @@ struct Ground {
     soil_b: vec4<f32>,
     // Backscatter, pebble tone.
     soil_c: vec4<f32>,
+    // The horizon map: centre (x, z, from the origin), edge, base height.
+    horizon: vec4<f32>,
+    // Where the march fades in and is whole, whether there is a map, and
+    // the penumbra's half-width as a tangent.
+    horizon_fade: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> ground: Ground;
+@group(constants::MATERIAL_BIND_GROUP) @binding(101) var horizon_map: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(102) var horizon_sampler: sampler;
+
+// How much of the sun a point sees past the ground in the horizon map
+// (`horizon.rs`), 0–1: a march toward the sun in steps growing from a texel
+// or two to kilometres, keeping the lowest the ray came to the ground over
+// the distance travelled; the sun's disc makes that an edge of a width.
+fn sunlit(p: vec3<f32>, to_sun: vec3<f32>) -> f32 {
+    let flat = length(to_sun.xz);
+    if flat < 1e-4 {
+        return 1.0;
+    }
+    let dir = to_sun.xz / flat;
+    let rise = to_sun.y / flat;
+    let edge = ground.horizon.z;
+    let texel = edge / 1024.0;
+    var s = 2.0 * texel;
+    var lowest = 1.0;
+    for (var k = 0; k < 40; k++) {
+        let uv = (p.xz + dir * s - ground.horizon.xy) / edge + 0.5;
+        if any(uv < vec2(0.0)) || any(uv > vec2(1.0)) {
+            break;
+        }
+        let h = textureSampleLevel(horizon_map, horizon_sampler, uv, 0.0).r + ground.horizon.w;
+        // A bias for what a coarse map makes of the point's own slope.
+        let over = p.y + rise * s - h + 0.15 * texel;
+        lowest = min(lowest, over / s);
+        if lowest < -2.0 * ground.horizon_fade.w {
+            break;
+        }
+        s *= 1.16;
+    }
+    return smoothstep(-ground.horizon_fade.w, ground.horizon_fade.w, lowest);
+}
 
 struct Lattice {
     cell: vec2<i32>,
@@ -329,8 +368,25 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         pbr_input.material.alpha_cutoff,
         pbr_input.material.base_color
     );
+    // Far off, beyond the sun's shadow maps, the horizon map's shadows.
+    var far = 0.0;
+    if ground.horizon_fade.z > 0.5 && lights.n_directional_lights > 0u && to_sun.y > -0.05 {
+        let fade = smoothstep(ground.horizon_fade.x, ground.horizon_fade.y, sqrt(away2));
+        if fade > 0.0 {
+            far = fade * (1.0 - sunlit(pbr_input.world_position.xyz, to_sun));
+        }
+    }
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
+    if far > 0.001 {
+        // The same point with the sun cut off: its normal turned just past
+        // edge-on to the sun, which leaves what the sky and the ground
+        // round it give.
+        var shade = pbr_input;
+        let n = pbr_input.N;
+        shade.N = normalize(n - to_sun * (dot(n, to_sun) + 0.02));
+        out.color = mix(out.color, apply_pbr_lighting(shade), far);
+    }
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     return out;
 }

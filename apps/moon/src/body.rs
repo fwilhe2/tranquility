@@ -190,6 +190,7 @@ impl Body {
                 casts_shadows: true,
                 radius: Some(self.radius),
                 soil: self.soil,
+                far_shadows: true,
             },
             sky: SkySettings {
                 air: self.air.clone(),

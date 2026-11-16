@@ -31,13 +31,18 @@ const PREPASS: &str = "embedded://tranquility/curve_prepass.wesl";
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
 pub struct GroundDetail {
     #[uniform(100)]
-    params: GroundParams,
+    pub(crate) params: GroundParams,
+    /// The ground round the camera, wide and coarse, for shadows beyond
+    /// the shadow maps (`horizon`).
+    #[texture(101)]
+    #[sampler(102)]
+    pub(crate) horizon_map: Option<Handle<Image>>,
 }
 
 /// Layout shared with `ground.wesl`; `curve` comes first, where the vertex
 /// shaders expect it.
 #[derive(ShaderType, Reflect, Debug, Clone, Default)]
-struct GroundParams {
+pub(crate) struct GroundParams {
     /// z: 1 / (2 · radius), 0 when flat.
     curve: Vec4,
     /// The floating origin in whole metres (x, z).
@@ -48,6 +53,12 @@ struct GroundParams {
     soil_b: Vec4,
     /// Backscatter, pebble tone.
     soil_c: Vec4,
+    /// The horizon map's centre relative to the origin (x, z), its edge,
+    /// and the height its heights are relative to.
+    pub(crate) horizon: Vec4,
+    /// Distance at which the march fades in and is whole, whether there is
+    /// a map at all, and the tangent of the penumbra's half-width.
+    pub(crate) horizon_fade: Vec4,
 }
 
 impl MaterialExtension for GroundDetail {
@@ -113,7 +124,10 @@ pub(crate) fn material(terrain: &TerrainSettings) -> GroundMaterial {
                 soil_a: Vec4::new(s.craterlets, s.grain, s.ripples, s.pebbles),
                 soil_b: Vec4::new(s.sparkle, s.powder, s.surge, s.surge_width.max(1e-3)),
                 soil_c: Vec4::new(s.backscatter, s.pebble_tone, 0.0, 0.0),
+                horizon: Vec4::ZERO,
+                horizon_fade: Vec4::ZERO,
             },
+            horizon_map: None,
         },
     }
 }

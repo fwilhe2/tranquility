@@ -110,6 +110,10 @@ fn start(world: &WorldDef, origin: &Origin) -> (Player, Transform) {
         steer: Steer::default(),
         thrust: 0.0,
     };
+    // TRANQUILITY_LOOK="yaw,pitch" turns the head where the walk starts.
+    if let Some([yaw, pitch]) = crate::tools::env_floats::<2>("TRANQUILITY_LOOK") {
+        (player.yaw, player.pitch) = (yaw, pitch);
+    }
     // TRANQUILITY_POSE="x,y,z,yaw,pitch" starts there, flying.
     if let Some([x, y, z, yaw, pitch]) = crate::tools::env_floats::<5>("TRANQUILITY_POSE") {
         position = origin.render(DVec2::new(x as f64, z as f64), y);

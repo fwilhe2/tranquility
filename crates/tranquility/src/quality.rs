@@ -1,7 +1,7 @@
 //! Quality tiers: what the frame costs on the GPU. `Q` cycles them live.
 //!
 //! - `TRANQUILITY_QUALITY=high|medium|low` picks the starting tier.
-//! - `TRANQUILITY_OFF=ssao,taa,bloom,shadows` switches single features off on
+//! - `TRANQUILITY_OFF=ssao,taa,bloom,shadows,far` switches single features off on
 //!   top of the tier, for measuring what each costs.
 
 use bevy::{
@@ -45,6 +45,15 @@ impl Quality {
         }
     }
 
+    /// How far from the camera the sun's shadow maps reach, m.
+    pub fn shadow_reach(self) -> f32 {
+        match self {
+            Quality::High => 3000.0,
+            Quality::Medium => 1500.0,
+            Quality::Low => 600.0,
+        }
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Quality::High => "high",
@@ -75,7 +84,7 @@ fn cycle(keys: Res<ButtonInput<KeyCode>>, mut quality: ResMut<Quality>) {
     }
 }
 
-fn off(feature: &str) -> bool {
+pub(crate) fn off(feature: &str) -> bool {
     std::env::var("TRANQUILITY_OFF").is_ok_and(|v| v.split(',').any(|f| f.trim() == feature))
 }
 
@@ -111,11 +120,12 @@ fn apply(
             cam.insert(Bloom::NATURAL);
         }
     }
-    let (size, cascades, reach, first) = match q {
-        Quality::High => (4096, 4, 3000.0, 30.0),
-        Quality::Medium => (2048, 3, 1500.0, 25.0),
-        Quality::Low => (1024, 2, 600.0, 30.0),
+    let (size, cascades, first) = match q {
+        Quality::High => (4096, 4, 30.0),
+        Quality::Medium => (2048, 3, 25.0),
+        Quality::Low => (1024, 2, 30.0),
     };
+    let reach = q.shadow_reach();
     shadow_map.size = size;
     for entity in &lights {
         commands.entity(entity).insert(

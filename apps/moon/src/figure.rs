@@ -1,14 +1,14 @@
-//! The walker's own body: a suit and backpack under the eye. Its head is
-//! round the camera and so never drawn (you are inside it); the rest is
-//! there when you look down, and, what matters more, it stands in the
-//! sunlight. With the sun behind you your shadow walks ahead of you,
-//! legs swinging, the one thing in an airless landscape that says someone
-//! is here.
+//! The walker's own body, seen only by the sun: a suit and backpack under
+//! the eye, on a render layer the camera does not draw and the sun's
+//! shadow maps do. With the sun behind you your shadow walks ahead of
+//! you, legs swinging, the one thing in an airless landscape that says
+//! someone is here; and no blocks of suit crowd the bottom of the frame.
 //!
 //! The legs swing with the gait and the arms against them; the view does
 //! not move with either. Motion belongs to the body and its shadow, never
 //! to the eye.
 
+use bevy::camera::visibility::RenderLayers;
 use tranquility::{ground::prop, prelude::*};
 
 use crate::gait::{Gait, Striding};
@@ -23,7 +23,7 @@ pub struct FigurePlugin;
 
 impl Plugin for FigurePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, pose.after(Striding));
+        app.add_systems(Startup, setup).add_systems(Update, (show_to_sun, pose.after(Striding)));
     }
 }
 
@@ -47,7 +47,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     let ball = meshes.add(Sphere::new(1.0).mesh().ico(3).expect("valid subdivision"));
     let tube = meshes.add(Capsule3d::new(0.5, 1.0));
     let part = |mesh: &Handle<Mesh>, material: &Handle<PropMaterial>, at: Vec3, size: Vec3| {
-        (Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), Transform::from_translation(at).with_scale(size))
+        (Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), Transform::from_translation(at).with_scale(size), RenderLayers::layer(SHADOW_ONLY))
     };
     commands
         .spawn((Figure { yaw: 0.0 }, Transform::default(), Visibility::Hidden))
@@ -73,6 +73,16 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
                 });
             }
         });
+}
+
+/// The layer only the sun sees.
+const SHADOW_ONLY: usize = 1;
+
+/// The sun draws both the world's layer and the figure's.
+fn show_to_sun(mut commands: Commands, lights: Query<Entity, (With<DirectionalLight>, Without<RenderLayers>)>) {
+    for light in &lights {
+        commands.entity(light).insert(RenderLayers::from_layers(&[0, SHADOW_ONLY]));
+    }
 }
 
 fn wrap(angle: f32) -> f32 {

@@ -97,6 +97,10 @@ pub struct TerrainSettings {
     pub radius: Option<f32>,
     /// What [`Pattern::Regolith`](crate::ground::Pattern::Regolith) draws.
     pub soil: Soil,
+    /// Shadows of hills and crater walls beyond the reach of the sun's
+    /// shadow maps, marched through a wide height map of the ground. For
+    /// worlds whose relief is the scenery under a low sun.
+    pub far_shadows: bool,
 }
 
 impl Default for TerrainSettings {
@@ -111,6 +115,7 @@ impl Default for TerrainSettings {
             casts_shadows: true,
             radius: None,
             soil: Soil::default(),
+            far_shadows: false,
         }
     }
 }

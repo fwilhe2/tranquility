@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 bevy.workspace = true
 earcut = "0.4.11"
+half = "2.7.1"
 
 # The atmosphere is computed in compute shaders, which WebGL2 lacks, so the
 # browser build targets WebGPU.

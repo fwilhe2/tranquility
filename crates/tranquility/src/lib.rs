@@ -32,6 +32,7 @@
 pub mod facade;
 pub mod geom;
 pub mod ground;
+pub mod horizon;
 pub mod hud;
 pub mod noise;
 pub mod origin;
@@ -82,6 +83,7 @@ impl Plugin for EnginePlugin {
             ground::GroundPlugin,
             quality::QualityPlugin,
             sound::SoundPlugin,
+            horizon::HorizonPlugin,
         ));
     }
 }

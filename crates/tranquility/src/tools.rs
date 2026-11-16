@@ -1,6 +1,7 @@
 //! Hooks for looking at a world without sitting at the window.
 //!
 //! - `TRANQUILITY_POSE="x,y,z,yaw,pitch"` starts there, flying.
+//! - `TRANQUILITY_LOOK="yaw,pitch"` turns the head, on foot.
 //! - `TRANQUILITY_HOUR=17.5` sets the clock (daily sun),
 //!   `TRANQUILITY_SUN=12` the elevation (fixed sun).
 //! - `TRANQUILITY_WALK=forward|back` walks by itself.
