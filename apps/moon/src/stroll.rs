@@ -460,3 +460,37 @@ fn caption(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_planet_is_in_the_frame_above_the_horizon() {
+        for body in crate::bodies::all() {
+            let Some(c) = planet(&body) else { continue };
+            let v = view(&body, None);
+            let (pitch, half) = (v.pitch.to_degrees(), v.lens / 2.0);
+            // The whole disc inside the frame, with room over it.
+            assert!(c.elevation + c.radius < pitch + half - 1.0, "{}: top of {:?} out of the frame", body.name, c.map);
+            assert!(c.elevation - c.radius > pitch - half, "{}: bottom out of the frame", body.name);
+            // The horizon in the lower half, but in the picture.
+            assert!(pitch > 0.0 && pitch < half - 3.0, "{}: horizon at {pitch}° in a {}° lens", body.name, v.lens);
+            assert!(wrap(v.yaw + c.azimuth.to_radians()).abs() < 1e-4, "{}: not facing it", body.name);
+        }
+    }
+
+    #[test]
+    fn easing_neither_overshoots_nor_jerks() {
+        let (mut x, mut speed) = (0.0f32, 0.0f32);
+        let mut fastest = 0.0f32;
+        for _ in 0..2000 {
+            ease(&mut x, &mut speed, 1.0, 0.45, 1.0 / 60.0);
+            assert!(x <= 1.0 + 1e-4);
+            fastest = fastest.max(speed);
+        }
+        assert!((x - 1.0).abs() < 0.01);
+        // A radian's turn never faster than a tenth of a radian a second.
+        assert!(fastest < 0.2, "{fastest}");
+    }
+}
