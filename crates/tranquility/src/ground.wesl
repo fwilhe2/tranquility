@@ -56,7 +56,7 @@ fn sunlit(p: vec3<f32>, to_sun: vec3<f32>) -> f32 {
     let texel = edge / 1024.0;
     var s = 2.0 * texel;
     var lowest = 1.0;
-    for (var k = 0; k < 40; k++) {
+    for (var k = 0; k < 28; k++) {
         let uv = (p.xz + dir * s - ground.horizon.xy) / edge + 0.5;
         if any(uv < vec2(0.0)) || any(uv > vec2(1.0)) {
             break;
@@ -68,7 +68,7 @@ fn sunlit(p: vec3<f32>, to_sun: vec3<f32>) -> f32 {
         if lowest < -2.0 * ground.horizon_fade.w {
             break;
         }
-        s *= 1.16;
+        s *= 1.22;
     }
     return smoothstep(-ground.horizon_fade.w, ground.horizon_fade.w, lowest);
 }
