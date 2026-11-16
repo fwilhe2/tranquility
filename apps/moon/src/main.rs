@@ -12,6 +12,7 @@ mod bodies;
 mod body;
 mod craters;
 mod heavens;
+mod prints;
 mod rocks;
 mod rover;
 mod suit;
@@ -52,7 +53,7 @@ fn main() {
     app.insert_resource(Current(start))
         .insert_resource(Catalogue(bodies))
         .add_systems(Update, (travel, describe));
-    // MOON_OFF=rocks,heavens,rover leaves parts out, for measuring what
+    // MOON_OFF=rocks,heavens,prints,rover leaves parts out, for measuring what
     // each costs.
     let off = std::env::var("MOON_OFF").unwrap_or_default();
     if !off.contains("rocks") {
@@ -60,6 +61,9 @@ fn main() {
     }
     if !off.contains("heavens") {
         app.add_plugins(heavens::HeavensPlugin);
+    }
+    if !off.contains("prints") {
+        app.add_plugins(prints::PrintsPlugin);
     }
     if !off.contains("rover") {
         app.add_plugins(rover::RoverPlugin);

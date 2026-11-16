@@ -98,7 +98,7 @@ impl Land for Io {
         for k in 0..6000 {
             let (angle, radius) = (k as f64 * 2.4, 40.0 * (k as f64).sqrt());
             let (x, z) = (radius * angle.cos(), radius * angle.sin());
-            if self.flow(x, z) < 0.01 && self.flow(x + 60.0, z - 60.0) < 0.01 && self.flow(x + 130.0, z - 220.0) > 0.9 {
+            if self.flow(x, z) < 0.01 && self.flow(x - 30.0, z - 60.0) < 0.01 && self.flow(x - 90.0, z - 200.0) > 0.9 {
                 return level_site(self, x, z, 0.5);
             }
         }
@@ -114,7 +114,7 @@ pub fn body() -> Body {
         au: 5.2,
         albedo: 0.55,
         grip: 0.6,
-        soil: Soil { craterlets: 0.0, grain: 0.7, ripples: 0.0, pebbles: 0.25, pebble_tone: 0.7, sparkle: 0.5, powder: 0.3, surge: 0.3, surge_width: 0.1, backscatter: 0.2 },
+        soil: Soil { craterlets: 0.0, grain: 0.7, ripples: 0.0, pebbles: 0.25, pebble_tone: 0.7, sparkle: 0.25, powder: 0.3, surge: 0.3, surge_width: 0.1, backscatter: 0.2 },
         roughness: 0.9,
         reflectance: 0.3,
         sun: (100.0, 18.0),

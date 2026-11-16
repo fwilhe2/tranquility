@@ -492,13 +492,13 @@ fn soil(p: vec2<f32>, colour: vec3<f32>, roughness: f32, pixel: f32, to_sun: vec
         }
         let l = lattice(p, num, 1);
         let mirror = max(dot(reflect(-to_sun, vec3(0.0, 1.0, 0.0)), v), 0.0);
-        let chance = 0.006 + 0.07 * pow(mirror, 5.0);
+        let chance = 0.003 + 0.05 * pow(mirror, 5.0);
         // In steps, so the antialiasing's sub-pixel jitter of the view
         // does not make every glint flicker.
         let turn = floor(dot(v, vec3(37.1, 17.7, 29.3)) * 4.0) * 0.25;
         let face = fract(ihash(l.cell, 61u) + turn);
         let glint = step(1.0 - chance, face) * (1.0 - smoothstep(0.1, 0.5, pixel));
-        d.colour += vec3(2.5 * sparkle * glint * (1.0 - shade));
+        d.colour += vec3(1.6 * sparkle * glint * (1.0 - shade));
     }
     return d;
 }

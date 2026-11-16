@@ -208,6 +208,13 @@ fn walk(
 
     let axis = |pos: KeyCode, neg: KeyCode| keys.pressed(pos) as i32 as f32 - keys.pressed(neg) as i32 as f32;
     let mut wish = forward * axis(KeyCode::KeyW, KeyCode::KeyS) + right * axis(KeyCode::KeyD, KeyCode::KeyA);
+    // TRANQUILITY_WALK=back (or forward) walks by itself, for screenshots
+    // of what walking leaves behind.
+    match std::env::var("TRANQUILITY_WALK").as_deref() {
+        Ok("back") => wish -= forward,
+        Ok(_) => wish += forward,
+        Err(_) => {}
+    }
     let fast = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let floor_at = |p: Vec3| feet_floor(&world, origin.world(p));
 

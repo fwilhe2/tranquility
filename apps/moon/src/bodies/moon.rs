@@ -117,7 +117,7 @@ impl Land for Moon {
 pub fn body() -> Body {
     Body {
         note: "The highlands to the north are kilometres high and further than they look: nothing in the vacuum says how far.",
-        rocks: Rocks { density: 0.12, largest: 5.0, albedo: [0.1, 0.17], tint: [1.03, 1.0, 0.95], ..default() },
+        rocks: Rocks { density: 0.12, largest: 5.0, albedo: [0.09, 0.145], tint: [1.03, 1.0, 0.95], ..default() },
         // The Earth, four times the size the Moon shows us, hardly moves
         // in the lunar sky.
         companions: vec![Companion::new(Map::Earth, 0.95, 322.0, 21.0)],

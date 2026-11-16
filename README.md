@@ -10,7 +10,7 @@ Three worlds show the range:
 | App | What it shows | What it exercises |
 |---|---|---|
 | `potsdam` | Potsdam in 1900, from historical-walk's own generated `city.json` | data-driven ground (terrain grid, river, land use), 2,862 buildings with real roof shapes, a facade shader, walls, bridges, trees, lamps, collision, landmark labels |
-| `moon` | a cratered lunar surface | a procedural height function (crater size classes from hashed cells), airless black sky with stars, a fixed low sun, lunar gravity, boulders scattered per chunk |
+| `moon` | nine bodies from Mercury to Pluto, the Moon among them, each unbounded | procedural grounds that never repeat, round worlds with true horizons, real gravity for a suited walker, other atmospheres (Mars, Titan, Pluto), planets in the sky at true size, a drivable rover |
 | `island` | an endless island landscape | the smallest complete world: noise heights, sea, Earth's atmosphere and a daily sun |
 
 ## Run
@@ -45,6 +45,50 @@ faster, **Space** jump, **F** fly (**Space**/**C** up and down), **[ ]** sun
 (time of day, or elevation for a fixed sun), **B** air on/off, **Q** quality
 tier, **H** hide text.
 
+In `moon`: **1**–**9** change body (`make run APP=moon` starts on the Moon;
+`TRANQUILITY_BODY=mars` or a first argument picks another), **R** climbs
+into the rover parked by the landing site and out again, **V** changes
+between its seat and a camera behind. On Phobos and Enceladus, where nobody
+walks, the movement keys fire suit jets while you are off the ground.
+
+## The moon app
+
+A body is a row of real numbers (gravity, radius, distance from the sun,
+albedo, grip) and a ground. Everything else follows from the row:
+
+- **Light.** Sunlight falls with the square of the distance and the sun's
+  disc shrinks with it; the camera is exposed for sunlit ground of the
+  body's albedo. Noon on Pluto is 1/1560 of Earth's and the stars are out.
+- **Walking.** A suited walker of 171 kg: pace from Froude numbers (legs
+  are pendulums: 1.4 m/s at a lope on the Moon, 2.1 on Mars), acceleration
+  and braking no harder than grip times gravity, a jump from the legs'
+  force–velocity curve (0.8 m on the Moon), ballistic flight. Titan's air
+  drags.
+- **Horizon.** The ground falls away as on a sphere of the body's radius:
+  2.4 km to the horizon on the Moon, 200 m on Phobos.
+- **Craters** follow the measured equilibrium size–frequency law
+  (N(>D) ≈ 0.08 D⁻² up to a saturation diameter set by the surface's
+  age), Pike's depth and rim ratios, and a spread of wear from crisp to
+  nearly gone. Bodies without craters (Io, Sputnik Planitia) have none.
+- **The rover** is the LRV at its real size, mass and power on a
+  rigid-body suspension. It takes six seconds to reach 13 km/h on the
+  Moon, because grip is weight.
+
+| Body | Site | What is there |
+|---|---|---|
+| Mercury | intercrater plains | saturated cratering, a lobate scarp, hollows |
+| Moon | a mare's edge | basalt plains with wrinkle ridges under highland massifs; the Earth |
+| Mars | layered buttes | dust, dunes of dark sand, ripples, rock fields; a butterscotch sky |
+| Phobos | sub-Mars side | grooves and rubble at 0.0006 g; Mars 42° across |
+| Io | sulphur plains | frost, lava flows, tilted mountains, no craters; Jupiter |
+| Europa | ridged plains | double ridges in seven families, chaos, salt stains; Jupiter |
+| Enceladus | a tiger stripe | snow, folds, the stripe's trough; Saturn with its rings edge-on |
+| Titan | a methane shore | cobbles of ice, channels, a sea, orange haze |
+| Pluto | Sputnik Planitia | convection cells, pit swarms, ice mountains; Charon |
+
+The grounds are built from what the missions saw, not from their data: no
+place here is a real place.
+
 ## The engine
 
 A world is a [`WorldDef`](crates/tranquility/src/world.rs): a `Ground` (height and
@@ -53,14 +97,24 @@ and settings for the terrain streamer, sky, water and walker. The engine never
 asks which world it is in. Everything else a world has, like buildings, rocks
 or trees, is the app's own Bevy systems.
 
-- `terrain`: square chunks streamed around the camera on Bevy's async compute
-  pool, at a resolution chosen by distance, with skirts to hide LOD cracks.
-  `ChunkMeshed` messages let apps decorate chunks as they arrive (the moon's
-  boulders).
+- `terrain`: square chunks on nested levels streamed around the camera on
+  Bevy's async compute pool: each level's chunks are twice the size of the
+  level below with the same number of quads, so detail falls off with
+  distance and the moon's ground reaches 25 km in some 260 draws. Skirts
+  hide the cracks between levels. `ChunkMeshed` messages let apps decorate
+  chunks as they arrive (the moon's rocks).
+- `origin`, `noise`: the ground can go on for ever. Positions given to a
+  `Ground` are `f64`; what is drawn is kept near zero by a floating origin
+  that jumps when the camera has gone 3 km; and noise and the ground
+  shader's detail come from hashes of integer lattice cells, which neither
+  repeat nor lose precision far out.
+- `vehicle`: a rigid body on sprung wheels, driven by forces within each
+  tyre's grip.
 - `sky`: Bevy's physically based atmosphere (or none, with a star field), a
   daily sun path by latitude or a fixed sun, cascaded shadows, exposure from
   the sun's height.
-- `player`: walk (gravity, jumps, step-down, sliding collision) or fly.
+- `player`: walk or fly. Walking is a velocity with forces on it: with the
+  default settings a game walk, with a world's grip and gravity that world's.
 - `geom`: a mesh builder, a raster for painting polygons and lines (land use,
   collision), and `Massing`, which builds a building from its footprint. Every
   roof is the lower envelope of planes over the footprint, as in
@@ -69,7 +123,9 @@ or trees, is the app's own Bevy systems.
   and walls rise to meet them.
 - `ground`: the terrain material, a `StandardMaterial` extension whose WESL
   shader draws detail below the mesh's resolution: cobbles, setts, gravel,
-  grass, regolith. A tint function picks one per vertex
+  grass, and a world's loose soil (craterlets shadowed by their own rims,
+  ripples, stones, frost glints, and how the powder answers the light, all
+  set by `Soil`). A tint function picks one per vertex
   (`Pattern::Cobbles.on(colour)`), and the mesh carries one weight per pattern
   so borders blend cleanly. Detail bends normals and colours only, never
   geometry, so the walker and the drawn ground agree.
@@ -87,13 +143,24 @@ Rendering is Bevy's: HDR, ACES tone mapping, bloom, TAA and SSAO.
 
 ## Performance
 
-On this dev machine (Radeon 540/550-class GPU, 1280×720) every world is
-GPU-bound: release and debug builds run at the same frame rate. Over Potsdam
-from 260 m up, the frame rate is 20 fps on high, 29 on medium (the default)
-and 30 on low. Sun shadows are the largest cost (high goes from 17 to 30 fps
-without them); SSAO, TAA and bloom cost a frame or so each. A flat world sets
-`TerrainSettings::casts_shadows = false`, since its fine chunks were most of
-the triangles in every cascade.
+On this dev machine (a laptop with a Radeon 540/550-class GPU, 1280×720)
+every world is GPU-bound once the ground has streamed in:
+
+| | high | medium (default) | low |
+|---|---|---|---|
+| Moon, on foot | 18 fps | 30 fps | 40 fps |
+| Potsdam from 260 m | 20 fps | 29 fps | 30 fps |
+
+Of a medium frame on the Moon, about 14 ms is there whatever is drawn,
+9 ms is the ground, 9 ms the sun's shadows, 3 ms the rocks and 2.5 ms TAA
+and bloom. `TRANQUILITY_BENCH=10` measures this (frame time percentiles,
+the app's own share, how long the ground took to appear);
+`TRANQUILITY_VSYNC=off` unties it from the display. The app's own update is
+under 2 ms.
+
+The ground takes about ten seconds to stream in on two cores. The engine
+and the moon app are compiled optimised in dev builds for that reason: at
+`opt-level = 1` it took a minute, long enough for a laptop CPU to throttle.
 
 ## Toward lunar-walk and historical-walk
 
@@ -102,13 +169,13 @@ What this covers, and what they have that the engine does not (yet):
 - **Shared**: one height function as the single source of truth (meshing jobs
   and walker agree), chunk streaming with LOD, a sun path, sky and exposure,
   walk and fly, quality tiers, sub-metre ground detail in the shader.
-- **lunar-walk** has more: four nested LOD levels out to 40 km with curvature
-  drop, terrain horizon shadows (here the ground casts into the ordinary
-  cascades, so crater shadows end at the shadow distance), Hapke photometry,
-  micro-craters traced in the ground shader, footprints, the rover,
-  per-world tone mapping, eye adaptation, companions in the sky, effects
-  (plumes, geysers, dust devils). Each would be engine work here, mostly
-  custom materials and render passes.
+- **lunar-walk** has more: twenty-one bodies to these nine, terrain horizon
+  shadows (here the ground casts into the ordinary cascades, so crater
+  shadows end at the shadow distance), full Hapke photometry, micro-craters
+  traced in the ground shader, footprints, solid rocks, landers, eye
+  adaptation, night by planetshine, effects (plumes, geysers, dust devils),
+  sound. Here now: nested levels with curvature, the rover with tracks and
+  dust, companions in the sky, other atmospheres.
 - **historical-walk** has more: ground textures laid along street frames
   (patterns here are world-aligned, and street edges are as soft as the 1 m
   vertex colours), the traced kerb, sky-view occlusion on walls, facade relief
