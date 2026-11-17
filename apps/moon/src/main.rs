@@ -103,11 +103,12 @@ fn travel(mut commands: Commands, keys: Res<ButtonInput<KeyCode>>, bodies: Res<C
     }
 }
 
-fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>, mut hud: ResMut<Hud>) {
+fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>, mut hud: ResMut<Hud>, mut window: Single<&mut Window>) {
     if !current.is_changed() {
         return;
     }
     let b = &current.0;
+    window.title = format!("{} · {}", b.name, b.site);
     let w = &world.walker;
     let g = if b.gravity < 0.1 { format!("{:.4}", b.gravity) } else if b.gravity < 1.0 { format!("{:.2}", b.gravity) } else { format!("{:.1}", b.gravity) };
     let share = b.gravity / 9.81 * 100.0;
