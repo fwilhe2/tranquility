@@ -113,7 +113,9 @@ which records the touring stroll offline: the app runs on a clock of
 exactly a sixtieth of a second a frame, however long a frame really
 takes, at the High tier, and pipes every frame to `ffmpeg` (H.264,
 CRF 16); the suit's sound is pulled from its voices a frame's worth at a
-time and put beside the picture. A slow machine makes the same smooth
+time and put beside the picture. The picture is drawn off the screen,
+into an image of exactly the size asked for, so a 1080p video comes out
+1080p on a laptop whose screen could not show the window. A slow machine makes the same smooth
 video, only more slowly: on an Intel UHD 620 two minutes at 1280×720 took
 25 minutes in a debug build. Needs `ffmpeg` with libx264 on the path.
 

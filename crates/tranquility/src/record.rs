@@ -8,8 +8,10 @@
 //! streamed in; the app quits when the video is done.
 //!
 //! So a slow machine makes a smooth video: it only takes longer. The
-//! quality tier is High unless `TRANQUILITY_QUALITY` says otherwise, and
-//! `TRANQUILITY_SIZE=1920x1080` sets the picture's size.
+//! quality tier is High unless `TRANQUILITY_QUALITY` says otherwise. The
+//! picture is drawn off the screen, into an image of exactly
+//! `TRANQUILITY_SIZE` (1920x1080 unless given), whatever the window and the
+//! screen are: the window stays black meanwhile.
 
 use std::{
     io::Write,
@@ -18,9 +20,14 @@ use std::{
 };
 
 use bevy::{
+    camera::RenderTarget,
     prelude::*,
-    render::view::screenshot::{Screenshot, ScreenshotCaptured},
+    render::{
+        render_resource::TextureFormat,
+        view::screenshot::{Screenshot, ScreenshotCaptured},
+    },
     time::TimeUpdateStrategy,
+    ui::{IsDefaultUiCamera, UiScale},
 };
 
 /// Frames a second, of the picture and of the clock.
@@ -57,6 +64,18 @@ pub fn recording() -> bool {
 pub(crate) fn add(app: &mut App) {
     let Ok(path) = std::env::var("TRANQUILITY_RECORD") else { return };
     let seconds = crate::tools::env_f32("TRANQUILITY_RECORD_SECONDS").unwrap_or(600.0);
+    let size = std::env::var("TRANQUILITY_SIZE")
+        .ok()
+        .and_then(|s| s.split_once('x').and_then(|(w, h)| Some(UVec2::new(w.trim().parse().ok()?, h.trim().parse().ok()?))))
+        .unwrap_or(UVec2::new(1920, 1080));
+    let image = {
+        let mut images = app.world_mut().resource_mut::<Assets<Image>>();
+        images.add(Image::new_target_texture(size.x, size.y, TextureFormat::Rgba8UnormSrgb, None))
+    };
+    // Text laid out for a window about 720 high keeps its proportions.
+    app.insert_resource(UiScale(size.y as f32 / 720.0))
+        .insert_resource(Canvas(image))
+        .add_systems(Update, aim_cameras);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(1.0 / FPS as f64)))
         .insert_resource(Recorder {
             path,
@@ -79,7 +98,18 @@ pub(crate) fn add(app: &mut App) {
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Rolling;
 
-fn roll(mut commands: Commands, time: Res<Time>, terrain: Res<crate::terrain::Chunks>, mut recorder: ResMut<Recorder>, mut exit: MessageWriter<AppExit>) {
+/// The image the recording is drawn into.
+#[derive(Resource)]
+struct Canvas(Handle<Image>);
+
+/// Cameras draw into the canvas, and the text with them.
+fn aim_cameras(mut commands: Commands, canvas: Res<Canvas>, cameras: Query<Entity, Added<Camera3d>>) {
+    for camera in &cameras {
+        commands.entity(camera).insert((RenderTarget::from(canvas.0.clone()), IsDefaultUiCamera));
+    }
+}
+
+fn roll(mut commands: Commands, time: Res<Time>, terrain: Res<crate::terrain::Chunks>, canvas: Res<Canvas>, mut recorder: ResMut<Recorder>, mut exit: MessageWriter<AppExit>) {
     let t = time.elapsed_secs();
     if recorder.settled.is_none() && t > 2.0 && terrain.is_settled() {
         recorder.settled = Some(t);
@@ -91,7 +121,7 @@ fn roll(mut commands: Commands, time: Res<Time>, terrain: Res<crate::terrain::Ch
     recorder.rolling = t > settled + 1.0 && due;
     if recorder.rolling {
         recorder.asked += 1;
-        commands.spawn(Screenshot::primary_window()).observe(take);
+        commands.spawn(Screenshot::image(canvas.0.clone())).observe(take);
         if recorder.asked.is_multiple_of(FPS * 10) {
             info!("record: {} s of {}", recorder.asked / FPS, recorder.seconds);
         }
