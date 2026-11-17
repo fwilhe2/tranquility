@@ -97,6 +97,8 @@ pub struct Stroll {
     pub touring: bool,
     /// When the body last changed, s since the start.
     changed_at: f32,
+    /// How far the picture has gone to black, 0–1: the sound follows.
+    pub dark: f32,
 }
 
 impl Default for Stroll {
@@ -117,6 +119,7 @@ impl Default for Stroll {
             skyline: None,
             touring: crate::options::get("MOON_STROLL").is_some_and(|v| v == "tour"),
             changed_at: 0.0,
+            dark: 0.0,
         }
     }
 }
@@ -436,7 +439,7 @@ fn title(name: &str) -> String {
 
 fn caption(
     current: Res<Current>,
-    stroll: Res<Stroll>,
+    mut stroll: ResMut<Stroll>,
     camera: Query<(Entity, Has<Vignette>), With<Player>>,
     mut commands: Commands,
     mut veil: Single<(&mut BackgroundColor, &mut Visibility), With<Veil>>,
@@ -456,6 +459,7 @@ fn caption(
     let leaving = |t: f32| if stroll.touring { ((t - (stay() - FADE)) / FADE).clamp(0.0, 1.0) } else { 0.0 };
     let dark = if !stroll.on { 0.0 } else { since.map_or(1.0, |t| (1.0 - (t / 3.0).clamp(0.0, 1.0)).max(leaving(t))) };
     let shown = if !stroll.on { 0.0 } else { since.map_or(0.0, |t| ((t - 2.5) / 2.5).clamp(0.0, 1.0) * ((15.0 - t) / 3.0).clamp(0.0, 1.0)) };
+    stroll.dark = dark;
     let (color, visibility) = &mut *veil;
     let want = if dark > 0.0 { Visibility::Inherited } else { Visibility::Hidden };
     visibility.set_if_neq(want);

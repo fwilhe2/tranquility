@@ -80,6 +80,9 @@ struct Said {
     rover: Option<(f32, f32)>,
     /// Boots come down since the last block: strength, and −1 left to 1.
     steps: Vec<(f32, f32)>,
+    /// 0–1: how much of it to hear (the picture's fades take the sound
+    /// with them).
+    level: f32,
 }
 
 #[derive(Resource, Clone)]
@@ -194,6 +197,9 @@ impl Suit {
                 }
             }
             self.work = said.work;
+            if (self.master.to - said.level).abs() > 1e-3 {
+                self.master.send(said.level, 0.6);
+            }
             self.jets.send(0.06 * said.jets.min(3.0), 0.03);
             let (speed, drive, on) = said.rover.map_or((0.0, 0.0, 0.0), |(v, d)| (v.min(1.4), d, 1.0));
             self.motor_pitch.send(speed, 0.08);
@@ -383,9 +389,12 @@ fn tell(
     player: Single<&Player>,
     rover: Option<Single<(&Vehicle, &Transform), With<Rover>>>,
     mut falls: MessageReader<Footfall>,
+    stroll: Option<Res<crate::stroll::Stroll>>,
 ) {
     let Ok(mut said) = line.0.lock() else { return };
     said.medium = Medium::of(&current.0);
+    // Down to a whisper while the picture is black, never quite silent.
+    said.level = 1.0 - 0.85 * stroll.as_ref().map_or(0.0, |s| s.dark);
     let aboard = driving.is_some_and(|d| d.aboard);
     // Work: nothing standing, a quarter at a walk, all of it at a lope
     // uphill.
@@ -413,7 +422,7 @@ fn tell(
 /// window: twenty seconds standing, twenty-five walking, five at a lope,
 /// ten standing again. For measuring.
 pub fn render(path: &str, body: &Body) -> std::io::Result<()> {
-    let line = Arc::new(Mutex::new(Said { medium: Medium::of(body), ..default() }));
+    let line = Arc::new(Mutex::new(Said { medium: Medium::of(body), level: 1.0, ..default() }));
     let mut suit = Suit::new(line.clone());
     let seconds = 60;
     let frames = seconds * RATE as usize;
@@ -465,7 +474,7 @@ mod tests {
     /// Left-channel level over a second of the suit standing on a body,
     /// from the third second (after the fade in).
     fn standing(body: &Body) -> f32 {
-        let line = Arc::new(Mutex::new(Said { medium: Medium::of(body), ..default() }));
+        let line = Arc::new(Mutex::new(Said { medium: Medium::of(body), level: 1.0, ..default() }));
         let mut suit = Suit::new(line);
         let all: Vec<f32> = (0..4 * RATE as usize).map(|_| suit.frame()[0]).collect();
         rms(&all[3 * RATE as usize..])
@@ -493,7 +502,7 @@ mod tests {
 
     #[test]
     fn a_footfall_is_heard_over_the_backpack() {
-        let line = Arc::new(Mutex::new(Said::default()));
+        let line = Arc::new(Mutex::new(Said { level: 1.0, ..default() }));
         let mut suit = Suit::new(line.clone());
         let quiet: Vec<f32> = (0..3 * RATE as usize).map(|_| suit.frame()[0]).collect();
         line.lock().unwrap().steps.push((0.3, -1.0));
