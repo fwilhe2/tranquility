@@ -272,7 +272,7 @@ fn park(
     let heading = Quat::from_rotation_y(world.spawn.yaw);
     let mut best = (f32::MAX, DVec2::ZERO);
     for k in 0..24 {
-        let offset = heading * Quat::from_rotation_y(-0.5 + 0.09 * k as f32) * Vec3::new(0.0, 0.0, -(8.0 + 0.7 * k as f32));
+        let offset = heading * Quat::from_rotation_y(-0.5 + 0.09 * k as f32) * Vec3::new(0.0, 0.0, -(13.0 + 0.6 * k as f32));
         let at = DVec2::new(world.spawn.x + offset.x as f64, world.spawn.z + offset.z as f64);
         let h = |dx: f64, dz: f64| world.ground.height(at.x + dx, at.y + dz);
         let tilt = (h(1.5, 0.0) - h(-1.5, 0.0)).abs() + (h(0.0, 1.5) - h(0.0, -1.5)).abs();
