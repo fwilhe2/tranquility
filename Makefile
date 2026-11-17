@@ -8,7 +8,7 @@
 # make shot APP=… OUT=…png [POSE=x,y,z,yaw,pitch] [HOUR=…]  saves a frame.
 #
 # make stroll                     the moon app touring its bodies, hands off
-# make video [VIDEO=stroll.mp4] [SECONDS=600] [SIZE=1920x1080]
+# make video [VIDEO=stroll.mp4] [SECONDS=600] [SIZE=1920x1080] [QUALITY=high]
 #                                 records that, offline, smooth at 60 fps
 
 APP ?= potsdam
@@ -16,6 +16,7 @@ OUT ?= shot.png
 VIDEO ?= stroll.mp4
 SECONDS ?= 600
 SIZE ?= 1920x1080
+QUALITY ?= high
 
 .PHONY: run release web serve shot stroll video check clean
 
@@ -50,7 +51,7 @@ stroll:
 
 video:
 	cargo build --release -p moon
-	TRANQUILITY_SIZE=$(SIZE) TRANQUILITY_RECORD=$(VIDEO) TRANQUILITY_RECORD_SECONDS=$(SECONDS) MOON_STROLL=tour target/release/moon
+	TRANQUILITY_QUALITY=$(QUALITY) TRANQUILITY_SIZE=$(SIZE) TRANQUILITY_RECORD=$(VIDEO) TRANQUILITY_RECORD_SECONDS=$(SECONDS) MOON_STROLL=tour target/release/moon
 
 web: $(WASM_BINDGEN)
 	cargo build --profile wasm-release --target wasm32-unknown-unknown -p $(APP)
