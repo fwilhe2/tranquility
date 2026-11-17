@@ -160,14 +160,16 @@ fn update(
     if text.0 != status_text {
         text.0 = status_text;
     }
-    if hud.is_changed() || quality.is_changed() {
+    if hud.is_changed() || quality.is_changed() || world.is_changed() {
         // Only what has really changed: laying text out again costs.
         if info.0 != hud.info {
             info.0 = hud.info.clone();
         }
         let keys = format!(
             "click: capture mouse   WASD: walk   Shift: faster   Space: jump   F: fly (Space/C up/down)\n\
-             [ ]: sun   B: air on/off   Q: quality   M: sound   H: hide text   F11: full screen   Esc: release mouse{}",
+             [ ]: sun   {}Q: quality   M: sound   H: hide text   F11: full screen   Esc: release mouse{}",
+            // `B` works only where there is no sky light (see `sky::toggle_air`).
+            if world.sky.sky_light || world.sky.air.is_none() { "" } else { "B: air on/off   " },
             if hud.keys.is_empty() { String::new() } else { format!("   {}", hud.keys) }
         );
         if help.0 != keys {
