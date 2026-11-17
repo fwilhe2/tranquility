@@ -43,6 +43,10 @@ pub struct Recorder {
     pub sound: Vec<i16>,
     encoder: Option<(Child, ChildStdin)>,
     finished: bool,
+    /// The picture's size, from the first frame, and whether a later one
+    /// has differed.
+    size: Option<(u32, u32)>,
+    resized: bool,
 }
 
 /// Whether this run records a video.
@@ -64,6 +68,8 @@ pub(crate) fn add(app: &mut App) {
             sound: Vec::new(),
             encoder: None,
             finished: false,
+            size: None,
+            resized: false,
         })
         .add_systems(Last, roll.in_set(Rolling));
 }
@@ -105,9 +111,23 @@ fn take(captured: On<ScreenshotCaptured>, mut recorder: ResMut<Recorder>) {
         return;
     };
     let frame = image.to_rgba8();
+    let (width, height) = (frame.width(), frame.height());
+    let mut pixels = frame.into_raw();
+    // Every frame the size of the first, whatever the window did since:
+    // cropped, or padded with black.
+    if let Some(size) = recorder.size
+        && (width, height) != size
+    {
+        pixels = fit(&pixels, (width, height), size);
+        if !recorder.resized {
+            recorder.resized = true;
+            warn!("record: the window changed size; frames are fitted to the first one's");
+        }
+    }
+    let size = *recorder.size.get_or_insert((width, height));
     if recorder.encoder.is_none() {
         let video = format!("{}.video.mp4", recorder.path);
-        let size = format!("{}x{}", frame.width(), frame.height());
+        let size = format!("{}x{}", size.0, size.1);
         let rate = FPS.to_string();
         let child = Command::new("ffmpeg")
             .args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &size, "-r", &rate, "-i", "-"])
@@ -127,11 +147,26 @@ fn take(captured: On<ScreenshotCaptured>, mut recorder: ResMut<Recorder>) {
         }
     }
     if let Some((_, stdin)) = &mut recorder.encoder
-        && let Err(e) = stdin.write_all(frame.as_raw())
+        && let Err(e) = stdin.write_all(&pixels)
     {
         error!("record: ffmpeg stopped taking frames: {e}");
     }
     recorder.written += 1;
+}
+
+/// RGBA pixels of one size, cropped or padded with black to another.
+fn fit(pixels: &[u8], from: (u32, u32), to: (u32, u32)) -> Vec<u8> {
+    let mut out = vec![0u8; (to.0 * to.1 * 4) as usize];
+    for pixel in out.chunks_exact_mut(4) {
+        pixel[3] = 255;
+    }
+    let (w, h) = (from.0.min(to.0) as usize * 4, from.1.min(to.1) as usize);
+    for row in 0..h {
+        let src = row * from.0 as usize * 4;
+        let dst = row * to.0 as usize * 4;
+        out[dst..dst + w].copy_from_slice(&pixels[src..src + w]);
+    }
+    out
 }
 
 /// Closes the picture, writes the sound, and puts the two together.
@@ -185,4 +220,20 @@ pub fn wav_bytes(samples: &[i16]) -> Vec<u8> {
         file.extend(s.to_le_bytes());
     }
     file
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frames_are_fitted_to_the_first_size() {
+        let red = [255u8, 0, 0, 255].repeat(4 * 2);
+        let bigger = fit(&red, (4, 2), (5, 3));
+        assert_eq!(bigger.len(), 5 * 3 * 4);
+        assert_eq!(&bigger[0..4], &[255, 0, 0, 255]);
+        assert_eq!(&bigger[16..20], &[0, 0, 0, 255]);
+        let smaller = fit(&red, (4, 2), (3, 1));
+        assert_eq!(smaller, [255u8, 0, 0, 255].repeat(3));
+    }
 }
