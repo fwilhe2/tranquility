@@ -247,6 +247,12 @@ the app's own share, how long the ground took to appear);
 `TRANQUILITY_VSYNC=off` unties it from the display. The app's own update is
 under 2 ms.
 
+The far shadows (`horizon`) cost nothing measurable from a walker's eye,
+where the far ground is a thin band at the horizon, and about a fifth of
+the frame from 600 m up, where it is most of the picture (measured on the
+laptop's Intel UHD 620: 136 against 163 ms). The stroll, the sound and
+the figure under the eye cost the app's update well under a millisecond.
+
 The ground takes about ten seconds to stream in on two cores. The engine
 and the moon app are compiled optimised in dev builds for that reason: at
 `opt-level = 1` it took a minute, long enough for a laptop CPU to throttle.
