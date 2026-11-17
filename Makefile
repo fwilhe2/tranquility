@@ -6,11 +6,18 @@
 #          make serve APP=moon      (build, then serve it on http://localhost:8000)
 #
 # make shot APP=… OUT=…png [POSE=x,y,z,yaw,pitch] [HOUR=…]  saves a frame.
+#
+# make stroll                     the moon app touring its bodies, hands off
+# make video [VIDEO=stroll.mp4] [SECONDS=600] [SIZE=1920x1080]
+#                                 records that, offline, smooth at 60 fps
 
 APP ?= potsdam
 OUT ?= shot.png
+VIDEO ?= stroll.mp4
+SECONDS ?= 600
+SIZE ?= 1920x1080
 
-.PHONY: run release web serve shot check clean
+.PHONY: run release web serve shot stroll video check clean
 
 # wasm-bindgen's CLI must match the crate version in Cargo.lock exactly, so a
 # matching copy is installed into .tools/ instead of relying on a global one.
@@ -36,6 +43,14 @@ check:
 shot:
 	cargo build -p $(APP)
 	TRANQUILITY_SCREENSHOT=$(OUT) TRANQUILITY_POSE=$(POSE) TRANQUILITY_HOUR=$(HOUR) target/debug/$(APP)
+
+stroll:
+	cargo build --release -p moon
+	MOON_STROLL=tour target/release/moon
+
+video:
+	cargo build --release -p moon
+	TRANQUILITY_SIZE=$(SIZE) TRANQUILITY_RECORD=$(VIDEO) TRANQUILITY_RECORD_SECONDS=$(SECONDS) MOON_STROLL=tour target/release/moon
 
 web: $(WASM_BINDGEN)
 	cargo build --profile wasm-release --target wasm32-unknown-unknown -p $(APP)
