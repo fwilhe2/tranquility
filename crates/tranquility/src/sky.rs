@@ -164,6 +164,7 @@ fn dress_camera(
         } else {
             commands.entity(camera).remove::<Skybox>();
         }
+
     }
 }
 
@@ -225,14 +226,16 @@ fn place_sun(
     }
 }
 
-/// `B` takes the air away and gives it back.
+/// `B` takes the air away and gives it back (where there is no sky light).
 fn toggle_air(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     air: Res<WorldAir>,
     atmospheres: Query<Entity, With<Atmosphere>>,
+    world: Res<WorldDef>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyB) {
+    // Not under a sky light: taking the air from under it hangs the GPU.
+    if !keys.just_pressed(KeyCode::KeyB) || world.sky.sky_light {
         return;
     }
     if atmospheres.is_empty() {

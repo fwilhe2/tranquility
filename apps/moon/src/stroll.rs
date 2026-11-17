@@ -95,6 +95,8 @@ pub struct Stroll {
     skyline: Option<f32>,
     /// Moving on to the next body every few minutes.
     pub touring: bool,
+    /// When the body last changed, s since the start.
+    changed_at: f32,
 }
 
 impl Default for Stroll {
@@ -114,6 +116,7 @@ impl Default for Stroll {
             pending: std::env::var_os("MOON_STROLL").is_some(),
             skyline: None,
             touring: std::env::var("MOON_STROLL").is_ok_and(|v| v == "tour"),
+            changed_at: 0.0,
         }
     }
 }
@@ -272,6 +275,7 @@ fn guide(
     if current.is_changed() {
         // Another body: wait for its ground, then set off again.
         stroll.arrived = None;
+        stroll.changed_at = time.elapsed_secs();
         stroll.stick = 0.0;
         stroll.skyline = None;
         stroll.look_in = 0.0;
@@ -286,7 +290,11 @@ fn guide(
     }
     match &mut stroll.arrived {
         Some(since) => *since += dt,
-        None if chunks.is_settled() && time.elapsed_secs() > 2.0 => stroll.arrived = Some(0.0),
+        // The old ground counts as settled until the new one is asked
+        // for: give it a moment.
+        None if chunks.is_settled() && time.elapsed_secs() > 2.0 && time.elapsed_secs() - stroll.changed_at > 2.0 => {
+            stroll.arrived = Some(0.0)
+        }
         None => {}
     }
 

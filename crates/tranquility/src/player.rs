@@ -12,8 +12,8 @@ use bevy::{
     camera::Exposure,
     core_pipeline::tonemapping::Tonemapping,
     input::mouse::AccumulatedMouseMotion,
-    light::AtmosphereEnvironmentMapLight,
     math::DVec2,
+    light::AtmosphereEnvironmentMapLight,
     pbr::AtmosphereSettings,
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
@@ -125,7 +125,7 @@ fn start(world: &WorldDef, origin: &Origin) -> (Player, Transform) {
 
 fn spawn(mut commands: Commands, world: Res<WorldDef>, origin: Res<Origin>) {
     let (player, transform) = start(&world, &origin);
-    commands.spawn((
+    let camera = commands.spawn((
         player,
         Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
@@ -143,8 +143,10 @@ fn spawn(mut commands: Commands, world: Res<WorldDef>, origin: Res<Origin>) {
         // Antialiasing, SSAO and bloom are set by the quality tier.
         Msaa::Off,
         AtmosphereSettings::default(),
-        AtmosphereEnvironmentMapLight::default(),
-    ));
+    )).id();
+    if world.sky.sky_light {
+        commands.entity(camera).insert(AtmosphereEnvironmentMapLight::default());
+    }
 }
 
 /// Another world: start again at its starting point.

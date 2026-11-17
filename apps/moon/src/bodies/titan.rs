@@ -150,8 +150,10 @@ pub fn body() -> Body {
         wind: 0.4,
         sun: (130.0, 28.0),
         stars: 0.0,
-        fill: 0.2,
-        fill_color: Color::linear_rgb(1.0, 0.7, 0.4),
+        // Nearly all of Titan's light comes from the orange sky, not the
+        // sun: matched to how Bevy's atmosphere lit it (`sky_light`).
+        fill: 0.8,
+        fill_color: Color::linear_rgb(1.0, 0.36, 0.1),
         exposure_bias: -2.6,
         sea: Some(WaterSettings { level: 0.0, color: Color::linear_rgb(0.012, 0.008, 0.004), roughness: 0.25 }),
         rocks: Rocks { density: 0.25, largest: 0.7, albedo: [0.3, 0.5], tint: [1.0, 0.9, 0.78], roughness: 0.8, rounded: true },

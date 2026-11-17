@@ -209,6 +209,12 @@ pub struct SkySettings {
     pub sun_illuminance: f32,
     /// Angular radius of the sun's disc, degrees (0.267 from Earth).
     pub sun_radius: f32,
+    /// Light from the whole sky on everything, rendered from the
+    /// atmosphere. Set for the world the app starts in and never changed
+    /// after: changing the sky under it (another world's air, `B`) hangs
+    /// the GPU. An app that changes worlds goes without, and lights the
+    /// shade with `ambient`.
+    pub sky_light: bool,
 }
 
 impl Default for SkySettings {
@@ -226,6 +232,7 @@ impl Default for SkySettings {
             exposure: 13.0,
             sun_illuminance: 133_000.0,
             sun_radius: 0.267,
+            sky_light: true,
         }
     }
 }

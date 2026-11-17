@@ -7,13 +7,18 @@ use std::sync::Arc;
 
 use tranquility::prelude::*;
 
-use crate::{heavens::Companion, rocks::Strewn, suit};
+use crate::{heavens::Companion, plumes::Plume, rocks::Strewn, suit};
 
 /// A body's ground, and where its loose rocks lie.
 pub trait Land: Ground {
     /// 0–1: how strewn with rocks the ground is at a point.
     fn rockiness(&self, _x: f64, _z: f64) -> f32 {
         0.03
+    }
+
+    /// Where jets vent within sight of a point (`plumes`).
+    fn vents(&self, _near: (f64, f64)) -> Vec<(f64, f64)> {
+        Vec::new()
     }
 
     /// Where the walk starts: level, open, sunlit ground.
@@ -102,6 +107,8 @@ pub struct Body {
     pub sea: Option<WaterSettings>,
     pub rocks: Rocks,
     pub companions: Vec<Companion>,
+    /// How its jets look, where its land vents.
+    pub plume: Option<Plume>,
     /// Whether the sun's disc shows (not through Titan's haze).
     pub sun_disc: bool,
     /// How far the ground is streamed: number of levels.
@@ -143,6 +150,7 @@ impl Body {
             sea: None,
             rocks: Rocks::default(),
             companions: Vec::new(),
+            plume: None,
             sun_disc: true,
             levels: 8,
             look: (0.5, -0.1),
@@ -201,6 +209,8 @@ impl Body {
                 exposure,
                 sun_illuminance: sunlight,
                 sun_radius: if self.sky_draws_sun() { self.sun_radius() } else { 0.0 },
+                // Bodies change: the fill does the sky's lighting.
+                sky_light: false,
                 ..default()
             },
             water: self.sea.clone(),

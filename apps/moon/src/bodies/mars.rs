@@ -175,8 +175,9 @@ pub fn body() -> Body {
         wind: 7.0,
         sun: (100.0, 24.0),
         stars: 0.0,
-        // The sky does the filling.
-        fill: 0.15,
+        // The dusty sky lights the shade, butterscotch: matched to how
+        // Bevy's atmosphere lit it (see `SkySettings::sky_light`).
+        fill: 0.6,
         fill_color: Color::linear_rgb(1.0, 0.75, 0.55),
         exposure_bias: -0.9,
         // Dark basalt under a film of the bright dust.
