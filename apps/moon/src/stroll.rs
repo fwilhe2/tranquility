@@ -51,7 +51,8 @@ const TURN: f32 = 0.16;
 /// Seconds on each body when touring, and the fade out at the end.
 /// (`MOON_STAY=seconds` for another stay.)
 fn stay() -> f32 {
-    crate::options::get("MOON_STAY").and_then(|v| v.parse().ok()).unwrap_or(240.0)
+    static STAY: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *STAY.get_or_init(|| crate::options::get("MOON_STAY").and_then(|v| v.parse().ok()).unwrap_or(240.0))
 }
 const FADE: f32 = 3.0;
 /// Floating on jets: height of the feet above the ground, m, and pace, m/s.
@@ -209,7 +210,9 @@ fn switch(
             chosen: player.yaw,
             lens,
             was_hidden: hud.hidden,
-            arrived: if stroll.pending { None } else { Some(1e3) },
+            // Started by hand on settled ground: up out of black and the
+            // title, as on arriving.
+            arrived: if stroll.pending { None } else { Some(0.0) },
             pending: false,
             touring: stroll.touring,
             ..default()

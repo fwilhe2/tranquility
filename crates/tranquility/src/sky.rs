@@ -99,7 +99,14 @@ fn apply_world(
     let start_hour = env("TRANQUILITY_HOUR").unwrap_or(sky.start_hour);
     let (elevation, azimuth) = match sky.sun {
         SunPath::Daily { latitude, declination } => daily(latitude, declination, start_hour),
-        SunPath::Fixed { azimuth, elevation } => (env("TRANQUILITY_SUN").unwrap_or(elevation), azimuth),
+        // TRANQUILITY_SUN=elevation, or elevation,azimuth.
+        SunPath::Fixed { azimuth, elevation } => match (*started, std::env::var("TRANQUILITY_SUN").ok()) {
+            (false, Some(v)) => {
+                let mut parts = v.split(',').map(|p| p.trim().parse::<f32>().ok());
+                (parts.next().flatten().unwrap_or(elevation), parts.next().flatten().unwrap_or(azimuth))
+            }
+            _ => (elevation, azimuth),
+        },
     };
     *started = true;
     *sun = Sun { hours: start_hour, elevation, azimuth };

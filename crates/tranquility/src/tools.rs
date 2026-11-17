@@ -3,7 +3,8 @@
 //! - `TRANQUILITY_POSE="x,y,z,yaw,pitch"` starts there, flying.
 //! - `TRANQUILITY_LOOK="yaw,pitch"` turns the head, on foot.
 //! - `TRANQUILITY_HOUR=17.5` sets the clock (daily sun),
-//!   `TRANQUILITY_SUN=12` the elevation (fixed sun).
+//!   `TRANQUILITY_SUN=12` the elevation (fixed sun),
+//!   `TRANQUILITY_SUN=12,230` elevation and azimuth.
 //! - `TRANQUILITY_WALK=forward|back` walks by itself.
 //! - `TRANQUILITY_SCREENSHOT=out.png` saves one frame once the terrain has
 //!   streamed in, then quits; `TRANQUILITY_SHOT_AFTER=seconds` waits longer.
