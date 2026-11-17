@@ -19,6 +19,7 @@ use crate::{
     body::{Body, Land, Rocks, level_site},
     craters::{Craters, Population},
     heavens::{Companion, Map},
+    plumes::Plume,
 };
 
 struct Enceladus {
@@ -31,6 +32,31 @@ impl Enceladus {
     fn stripe(&self, x: f64, z: f64) -> f32 {
         let wander = 900.0 * fbm(x, z, 12_000.0, 3, 0.5, 151) as f64;
         lane(x, z + wander - 14_800.0, std::f32::consts::FRAC_PI_2, 35_000.0, 152).0
+    }
+
+    /// The nearest stripe's axis north or south of `z` at `x`: where the
+    /// signed distance changes sign, within twenty kilometres.
+    fn axis(&self, x: f64, z: f64) -> Option<f64> {
+        let step = 500.0;
+        let mut best: Option<(f64, f64)> = None;
+        for i in -40i32..40 {
+            let (z0, z1) = (z + i as f64 * step, z + (i + 1) as f64 * step);
+            let (d0, d1) = (self.stripe(x, z0), self.stripe(x, z1));
+            // A crossing of the axis, not the jump between two lanes.
+            if d0.signum() != d1.signum() && (d0 - d1).abs() < 2.0 * step as f32 && best.is_none_or(|(a, _)| (a - z).abs() > (z0 - z).abs()) {
+                best = Some((z0, z1));
+            }
+        }
+        let (mut a, mut b) = best?;
+        for _ in 0..30 {
+            let m = 0.5 * (a + b);
+            if self.stripe(x, a).signum() == self.stripe(x, m).signum() {
+                a = m;
+            } else {
+                b = m;
+            }
+        }
+        Some(0.5 * (a + b))
     }
 
     fn base(&self, x: f64, z: f64, step: f32) -> (f32, f32) {
@@ -80,6 +106,21 @@ impl Land for Enceladus {
     fn landing_site(&self) -> (f64, f64) {
         level_site(self, 0.0, 0.0, 0.5)
     }
+
+    /// Along the nearest stripe's axis, a jet every couple of kilometres
+    /// (a hundred-odd have been counted along the four stripes), each a
+    /// little off its slot.
+    fn vents(&self, near: (f64, f64)) -> Vec<(f64, f64)> {
+        let mut vents = Vec::new();
+        for k in -6i32..=6 {
+            let slot = (near.0 / 2200.0).round() as i32 + k;
+            let x = (slot as f64 + 0.8 * (unit(slot, 1, 0x7e7) as f64 - 0.5)) * 2200.0;
+            if let Some(z) = self.axis(x, near.1) {
+                vents.push((x, z));
+            }
+        }
+        vents
+    }
 }
 
 pub fn body() -> Body {
@@ -104,9 +145,27 @@ pub fn body() -> Body {
         fill_color: Color::linear_rgb(0.85, 0.93, 1.0),
         rocks: Rocks { density: 0.12, largest: 14.0, albedo: [0.55, 0.85], tint: [0.9, 0.98, 1.05], roughness: 0.6, ..default() },
         companions: vec![Companion { turn: [0.0, 1.0, 0.0], rings: Some((1.24, 2.27)), ..Companion::new(Map::Saturn, 14.7, 5.0, 11.5) }],
+        plume: Some(Plume { width: 260.0, height: 9000.0, color: [0.85, 0.92, 1.0], opacity: 0.4 }),
         // A 250 km moon: 12 km of ground is already well round the curve.
         levels: 7,
         look: (-0.1, 0.1),
         ..Body::airless("Enceladus", "Tiger stripe, south pole", Arc::new(land))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_jets_stand_on_the_stripe_within_sight() {
+        let land = Enceladus { craters: Craters::new(Population { seed: 1789, ..default() }) };
+        let start = land.landing_site();
+        let vents = land.vents(start);
+        assert!(vents.len() >= 10, "{}", vents.len());
+        for (x, z) in vents {
+            assert!(land.stripe(x, z).abs() < 1.0, "off the axis at {x}, {z}");
+            assert!((z - start.1).abs() < 5000.0, "too far: {} m", (z - start.1).abs());
+        }
     }
 }

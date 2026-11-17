@@ -15,6 +15,7 @@ mod figure;
 mod gait;
 mod heavens;
 mod lander;
+mod plumes;
 mod prints;
 mod rocks;
 mod rover;
@@ -64,7 +65,7 @@ fn main() {
         .insert_resource(Catalogue(bodies))
         .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin))
         .add_systems(Update, (travel, describe));
-    // MOON_OFF=rocks,heavens,prints,figure,lander,rover leaves parts out, for measuring what
+    // MOON_OFF=rocks,heavens,prints,figure,lander,plumes,rover leaves parts out, for measuring what
     // each costs.
     let off = std::env::var("MOON_OFF").unwrap_or_default();
     if !off.contains("rocks") {
@@ -75,6 +76,9 @@ fn main() {
     }
     if !off.contains("prints") {
         app.add_plugins(prints::PrintsPlugin);
+    }
+    if !off.contains("plumes") {
+        app.add_plugins(plumes::PlumesPlugin);
     }
     if !off.contains("figure") {
         app.add_plugins(figure::FigurePlugin);
