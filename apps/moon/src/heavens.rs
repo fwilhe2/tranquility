@@ -12,6 +12,7 @@ use bevy::{
     platform::collections::HashMap,
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
+    tasks::{AsyncComputeTaskPool, Task, block_on},
 };
 use tranquility::{
     noise::{fbm3, smoothstep},
@@ -67,6 +68,7 @@ pub struct HeavensPlugin;
 impl Plugin for HeavensPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Maps>()
+            .add_systems(PreStartup, start_painting)
             .add_systems(Startup, setup)
             .add_systems(Update, populate.run_if(resource_changed::<Current>))
             .add_systems(PostUpdate, follow.before(TransformSystems::Propagate));
@@ -80,9 +82,36 @@ struct SunDisc;
 #[derive(Component)]
 struct Hanging(Vec3);
 
-/// Planet maps are painted once.
+/// Planet maps are painted once, all of them on the compute pool from the
+/// start: Jupiter's takes seconds, and the first visit must not wait.
 #[derive(Resource, Default)]
-struct Maps(HashMap<Map, Handle<Image>>);
+struct Maps {
+    painted: HashMap<Map, Handle<Image>>,
+    painting: HashMap<Map, Task<Image>>,
+}
+
+const PAINTED: [Map; 5] = [Map::Earth, Map::Mars, Map::Jupiter, Map::Saturn, Map::Charon];
+
+fn start_painting(mut maps: ResMut<Maps>) {
+    let pool = AsyncComputeTaskPool::get();
+    for map in PAINTED {
+        maps.painting.insert(map, pool.spawn(async move { paint(map) }));
+    }
+}
+
+/// The map, waiting for it if it is not done yet.
+fn map_image(maps: &mut Maps, images: &mut Assets<Image>, map: Map) -> Handle<Image> {
+    if let Some(handle) = maps.painted.get(&map) {
+        return handle.clone();
+    }
+    let image = match maps.painting.remove(&map) {
+        Some(task) => block_on(task),
+        None => paint(map),
+    };
+    let handle = images.add(image);
+    maps.painted.insert(map, handle.clone());
+    handle
+}
 
 #[derive(Resource)]
 struct Globe {
@@ -178,7 +207,7 @@ fn populate(
                 ..default()
             },
             map => {
-                let image = maps.0.entry(map).or_insert_with(|| images.add(paint(map))).clone();
+                let image = map_image(&mut maps, &mut images, map);
                 StandardMaterial {
                     base_color: Color::linear_rgb(dim, dim, dim),
                     base_color_texture: Some(image),
