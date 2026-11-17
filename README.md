@@ -95,6 +95,21 @@ endless walk on any of the nine bodies.
   `MOON_` or `TRANQUILITY_`). Click once for sound: browsers keep it off
   until then.
 
+## Recording a video
+
+```sh
+TRANQUILITY_SIZE=1920x1080 TRANQUILITY_RECORD=stroll.mp4 TRANQUILITY_RECORD_SECONDS=600 \
+  MOON_STROLL=tour target/release/moon
+```
+
+records ten minutes of the touring stroll, offline: the app runs on a
+clock of exactly a sixtieth of a second a frame however long a frame
+really takes, at the High tier, and pipes every frame to `ffmpeg` (H.264,
+CRF 16); the suit's sound is pulled from its voices a frame's worth at a
+time and put beside the picture. A slow machine makes the same smooth
+video, only more slowly (an Intel UHD 620 renders 640×360 at about seven
+frames a second). Needs `ffmpeg` with libx264 on the path.
+
 ## Sound
 
 There is no sound from outside on an airless body: nothing carries it.

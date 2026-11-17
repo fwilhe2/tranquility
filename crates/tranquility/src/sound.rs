@@ -37,9 +37,48 @@ impl Synth {
     }
 }
 
-/// Starts a voice; it sounds until the entity returned is despawned.
+/// Starts a voice; it sounds until the entity returned is despawned. While
+/// a video is being recorded it goes on the recording's tape instead.
 pub fn play(commands: &mut Commands, synths: &mut Assets<Synth>, voice: impl Voice) -> Entity {
+    #[cfg(not(target_arch = "wasm32"))]
+    if crate::record::recording() {
+        let voice: Box<dyn Voice> = Box::new(voice);
+        commands.queue(move |world: &mut World| {
+            if let Some(tape) = world.get_resource::<Tape>()
+                && let Ok(mut voices) = tape.0.lock()
+            {
+                voices.push(voice);
+            }
+        });
+        return commands.spawn_empty().id();
+    }
     commands.spawn(AudioPlayer(synths.add(Synth::new(voice)))).id()
+}
+
+/// The voices of a recording, pulled a frame's worth at a time.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Resource, Default)]
+struct Tape(Mutex<Vec<Box<dyn Voice>>>);
+
+#[cfg(not(target_arch = "wasm32"))]
+fn pull(tape: Res<Tape>, mut recorder: ResMut<crate::record::Recorder>) {
+    if !recorder.rolling {
+        return;
+    }
+    let Ok(mut voices) = tape.0.lock() else { return };
+    let n = (RATE as u32 / crate::record::FPS) as usize;
+    recorder.sound.reserve(2 * n);
+    for _ in 0..n {
+        let mut frame = [0.0f32; 2];
+        for voice in voices.iter_mut() {
+            let [l, r] = voice.frame();
+            frame[0] += l;
+            frame[1] += r;
+        }
+        for s in frame {
+            recorder.sound.push((s.clamp(-1.0, 1.0) * 32767.0) as i16);
+        }
+    }
 }
 
 /// Whether this run should make any sound at all.
@@ -102,6 +141,10 @@ pub struct SoundPlugin;
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         app.add_audio_source::<Synth>().init_resource::<Muted>().add_systems(Update, mute);
+        #[cfg(not(target_arch = "wasm32"))]
+        if crate::record::recording() {
+            app.init_resource::<Tape>().add_systems(Last, pull.before(crate::record::Rolling));
+        }
     }
 }
 

@@ -8,6 +8,7 @@
 //! - `TRANQUILITY_WALK=forward|back` walks by itself.
 //! - `TRANQUILITY_SCREENSHOT=out.png` saves one frame once the terrain has
 //!   streamed in, then quits; `TRANQUILITY_SHOT_AFTER=seconds` waits longer.
+//! - `TRANQUILITY_RECORD=out.mp4` records a video offline (see `record`).
 //! - `TRANQUILITY_BENCH=10` measures frame times for that many seconds once
 //!   the terrain has streamed in, prints them, then quits.
 
@@ -30,6 +31,8 @@ impl Plugin for ToolsPlugin {
     fn build(&self, app: &mut App) {
         #[cfg(not(target_arch = "wasm32"))]
         screenshot::add(app);
+        #[cfg(not(target_arch = "wasm32"))]
+        crate::record::add(app);
         if let Some(seconds) = env_f32("TRANQUILITY_BENCH") {
             app.insert_resource(Bench { seconds, frames: Vec::new(), since: None, began: None, busy: Vec::new() })
                 .add_systems(First, |mut bench: ResMut<Bench>| bench.began = Some(std::time::Instant::now()))

@@ -18,6 +18,7 @@ TRANQUILITY_BODY=mars target/debug/moon          # or a first argument
 TRANQUILITY_BENCH=10 TRANQUILITY_VSYNC=off target/debug/moon   # frame times
 MOON_DRIVE=chase,go TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # at the rover's wheel
 MOON_STROLL=1 TRANQUILITY_SHOT_AFTER=40 TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # 40 s into the stroll
+TRANQUILITY_SIZE=640x360 TRANQUILITY_RECORD=out.mp4 TRANQUILITY_RECORD_SECONDS=6 MOON_STROLL=1 target/debug/moon   # a video, offline, with sound
 ```
 
 A cold build of Bevy takes ~25 min on this machine; later builds are incremental. Release (thin LTO, one codegen unit) and wasm builds are slow too.

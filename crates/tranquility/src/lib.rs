@@ -38,6 +38,8 @@ pub mod noise;
 pub mod origin;
 pub mod player;
 pub mod quality;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod record;
 pub mod sky;
 pub mod sound;
 pub mod terrain;

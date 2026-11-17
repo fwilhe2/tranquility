@@ -71,6 +71,9 @@ impl Plugin for QualityPlugin {
             Ok("low") => Quality::Low,
             Ok("medium") => Quality::Medium,
             Ok("high") => Quality::High,
+            // A recording has all the time it needs.
+            #[cfg(not(target_arch = "wasm32"))]
+            _ if crate::record::recording() => Quality::High,
             // Medium holds ~30 fps on a small discrete GPU; Q goes up.
             _ => Quality::Medium,
         };
