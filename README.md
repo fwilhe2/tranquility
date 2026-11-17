@@ -10,7 +10,7 @@ Three worlds show the range:
 | App | What it shows | What it exercises |
 |---|---|---|
 | `potsdam` | Potsdam in 1900, from historical-walk's own generated `city.json` | data-driven ground (terrain grid, river, land use), 2,862 buildings with real roof shapes, a facade shader, walls, bridges, trees, lamps, collision, landmark labels |
-| `moon` | nine bodies from Mercury to Pluto, the Moon among them, each unbounded | procedural grounds that never repeat, round worlds with true horizons, real gravity for a suited walker, other atmospheres (Mars, Titan, Pluto), planets in the sky at true size, a drivable rover |
+| `moon` | nine bodies from Mercury to Pluto, the Moon among them, each unbounded | procedural grounds that never repeat, round worlds with true horizons, real gravity for a suited walker, other atmospheres (Mars, Titan, Pluto), planets in the sky at true size, a drivable rover, a stroll that walks itself and records itself, sound through the suit |
 | `island` | an endless island landscape | the smallest complete world: noise heights, sea, Earth's atmosphere and a daily sun |
 
 ## Run
