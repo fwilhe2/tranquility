@@ -57,6 +57,7 @@ fn main() {
         .clone();
     // MOON_SOUND_WAV=out.wav: a minute of the body's sound to a file, and
     // nothing else.
+    #[cfg(not(target_arch = "wasm32"))]
     if let Ok(path) = std::env::var("MOON_SOUND_WAV") {
         sound::render(&path, &start).expect("writing the sound");
         return;

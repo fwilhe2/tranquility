@@ -418,6 +418,7 @@ fn tell(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Renders a minute to a 16-bit WAV file, with no audio device and no
 /// window: twenty seconds standing, twenty-five walking, five at a lope,
 /// ten standing again. For measuring.
@@ -427,7 +428,7 @@ pub fn render(path: &str, body: &Body) -> std::io::Result<()> {
     let seconds = 60;
     let frames = seconds * RATE as usize;
     let walker = crate::suit::walker(body.gravity, body.grip, body.drag);
-    let mut data = Vec::with_capacity(frames * 4);
+    let mut data = Vec::with_capacity(frames * 2);
     let (mut next_step, mut left) = (20.0f32, false);
     for k in 0..frames {
         let t = k as f32 / RATE;
@@ -442,25 +443,10 @@ pub fn render(path: &str, body: &Body) -> std::io::Result<()> {
             }
         }
         for sample in suit.frame() {
-            data.extend(((sample.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+            data.push((sample.clamp(-1.0, 1.0) * 32767.0) as i16);
         }
     }
-    let rate = RATE as u32;
-    let mut file = Vec::with_capacity(data.len() + 44);
-    file.extend(b"RIFF");
-    file.extend((36 + data.len() as u32).to_le_bytes());
-    file.extend(b"WAVEfmt ");
-    file.extend(16u32.to_le_bytes());
-    file.extend(1u16.to_le_bytes());
-    file.extend(2u16.to_le_bytes());
-    file.extend(rate.to_le_bytes());
-    file.extend((rate * 4).to_le_bytes());
-    file.extend(4u16.to_le_bytes());
-    file.extend(16u16.to_le_bytes());
-    file.extend(b"data");
-    file.extend((data.len() as u32).to_le_bytes());
-    file.extend(data);
-    std::fs::write(path, file)
+    std::fs::write(path, tranquility::record::wav_bytes(&data))
 }
 
 #[cfg(test)]
