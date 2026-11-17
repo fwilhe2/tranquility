@@ -50,7 +50,7 @@ cached, so a run takes about five minutes.
 
 Click to capture the mouse, **Esc** to let it go. **WASD** walk, **Shift**
 faster, **Space** jump, **F** fly (**Space**/**C** up and down), **[ ]** sun
-(time of day, or elevation for a fixed sun), **B** air on/off, **Q** quality
+(time of day, or elevation for a fixed sun), **B** air on/off (Mars and Titan), **Q** quality
 tier, **M** sound, **H** hide text, **F11** full screen
 (`TRANQUILITY_SIZE=1920x1080` sets the window's size, for recording).
 
