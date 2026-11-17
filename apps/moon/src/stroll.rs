@@ -247,7 +247,8 @@ fn cost(body: &Body, ground: &dyn Ground, rover: Option<DVec2>, lander: Option<D
         if d <= 12.0 && [0.0, -0.9, 0.9].iter().any(|side| { let q = p + across * *side; ground.blocked(q.x, q.y) }) {
             c += 120.0;
         }
-        if rover.is_some_and(|r| r.distance(p) < 4.0) {
+        // A wide berth: passing close, it fills half the picture.
+        if rover.is_some_and(|r| r.distance(p) < 9.0) {
             c += 150.0;
         }
         if lander.is_some_and(|l| l.distance(p) < KEEP_OFF as f64 + 1.5) {
