@@ -120,10 +120,10 @@ video, only more slowly: on an Intel UHD 620 two minutes at 1280×720 took
 25 minutes in a debug build. Needs `ffmpeg` with libx264 on the path.
 
 One limit does show on a weak GPU: a frame must still finish within the
-driver's timeout. At 1080p on the High tier, the frame in which Mars's
-air is first computed took an Intel UHD 620 past it (the driver resets
-the GPU and the recording stops); `make video QUALITY=medium` goes
-through.
+driver's timeout. Recording at 1080p on the High tier, an Intel UHD 620
+went past it as the tour changed into Mars, where the air is computed
+(the driver reset the GPU and the recording stopped; at 640×360 it went
+through). `make video QUALITY=medium` asks less of each frame.
 
 ## Sound
 
