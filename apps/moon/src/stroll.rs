@@ -51,7 +51,7 @@ const TURN: f32 = 0.16;
 /// Seconds on each body when touring, and the fade out at the end.
 /// (`MOON_STAY=seconds` for another stay.)
 fn stay() -> f32 {
-    std::env::var("MOON_STAY").ok().and_then(|v| v.parse().ok()).unwrap_or(240.0)
+    crate::options::get("MOON_STAY").and_then(|v| v.parse().ok()).unwrap_or(240.0)
 }
 const FADE: f32 = 3.0;
 /// Floating on jets: height of the feet above the ground, m, and pace, m/s.
@@ -113,9 +113,9 @@ impl Default for Stroll {
             sun_up: true,
             was_hidden: false,
             arrived: None,
-            pending: std::env::var_os("MOON_STROLL").is_some(),
+            pending: crate::options::get("MOON_STROLL").is_some(),
             skyline: None,
-            touring: std::env::var("MOON_STROLL").is_ok_and(|v| v == "tour"),
+            touring: crate::options::get("MOON_STROLL").is_some_and(|v| v == "tour"),
             changed_at: 0.0,
         }
     }

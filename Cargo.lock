@@ -3547,6 +3547,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "tranquility",
+ "web-sys",
 ]
 
 [[package]]

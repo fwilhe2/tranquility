@@ -15,6 +15,7 @@ mod figure;
 mod gait;
 mod heavens;
 mod lander;
+mod options;
 mod plumes;
 mod prints;
 mod rocks;
@@ -48,7 +49,7 @@ const KEYS: [KeyCode; 9] = [
 
 fn main() {
     let bodies = bodies::all();
-    let wanted = std::env::args().nth(1).or_else(|| std::env::var("TRANQUILITY_BODY").ok());
+    let wanted = std::env::args().nth(1).or_else(|| options::get("TRANQUILITY_BODY"));
     let start = wanted
         .and_then(|name| bodies.iter().find(|b| b.name.eq_ignore_ascii_case(&name)))
         .or_else(|| bodies.iter().find(|b| b.name == "Moon"))
@@ -67,7 +68,7 @@ fn main() {
         .add_systems(Update, (travel, describe));
     // MOON_OFF=rocks,heavens,prints,figure,lander,plumes,rover leaves parts out, for measuring what
     // each costs.
-    let off = std::env::var("MOON_OFF").unwrap_or_default();
+    let off = options::get("MOON_OFF").unwrap_or_default();
     if !off.contains("rocks") {
         app.add_plugins(rocks::RocksPlugin);
     }

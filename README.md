@@ -90,6 +90,10 @@ endless walk on any of the nine bodies.
 - **T** tours the bodies (or start with `MOON_STROLL=tour`): four
   minutes on each, out to black, and on to the next, from Mercury to
   Pluto and round again. `MOON_STAY=seconds` changes the stay.
+- In the browser the address does it: `…/#stroll`, or
+  `…/#stroll=tour&body=mars&stay=120` (any option, named without its
+  `MOON_` or `TRANQUILITY_`). Click once for sound: browsers keep it off
+  until then.
 
 ## Sound
 
