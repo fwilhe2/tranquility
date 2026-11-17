@@ -207,6 +207,7 @@ fn setup(
     let blank = || Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     commands.spawn((
         Dust::default(),
+        Visibility::Hidden,
         Mesh3d(meshes.add(blank())),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::WHITE,
@@ -780,15 +781,16 @@ fn fly_dust(time: Res<Time>, world: Res<WorldDef>, current: Res<Current>, mut du
 fn draw_dust(
     current: Res<Current>,
     camera: Single<&Transform, (With<Camera3d>, Without<Dust>)>,
-    dust: Single<(&Dust, &Mesh3d, &Transform)>,
+    dust: Single<(&Dust, &Mesh3d, &mut Visibility)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut was_empty: Local<bool>,
 ) {
-    let (dust, handle, _) = dust.into_inner();
-    if dust.grains.is_empty() && *was_empty {
+    let (dust, handle, mut visibility) = dust.into_inner();
+    // Nothing in flight: hidden, rather than a mesh of nothing (which the
+    // renderer warns about every time).
+    visibility.set_if_neq(if dust.grains.is_empty() { Visibility::Hidden } else { Visibility::Inherited });
+    if dust.grains.is_empty() {
         return;
     }
-    *was_empty = dust.grains.is_empty();
     let Some(mut mesh) = meshes.get_mut(&handle.0) else { return };
     // Each grain a small square facing the camera, lit like the ground it
     // came from: its normal is the ground's.

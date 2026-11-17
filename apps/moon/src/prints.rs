@@ -44,6 +44,7 @@ struct Prints {
 fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut props: ResMut<Assets<PropMaterial>>, mut images: ResMut<Assets<Image>>) {
     commands.spawn((
         Prints::default(),
+        Visibility::Hidden,
         Mesh3d(meshes.add(Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default()))),
         MeshMaterial3d(props.add(prop(StandardMaterial {
             base_color_texture: Some(images.add(sole())),
@@ -63,10 +64,10 @@ fn tread(
     world: Res<WorldDef>,
     origin: Res<Origin>,
     mut falls: MessageReader<Footfall>,
-    prints: Single<(&mut Prints, &Mesh3d, &Transform)>,
+    prints: Single<(&mut Prints, &Mesh3d, &Transform, &mut Visibility)>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    let (mut prints, handle, frame) = prints.into_inner();
+    let (mut prints, handle, frame, mut visibility) = prints.into_inner();
     let prints = &mut *prints;
     let mut stale = false;
     if world.is_changed() {
@@ -96,6 +97,11 @@ fn tread(
         stale = true;
     }
     if !stale {
+        return;
+    }
+    // None yet: hidden, rather than a mesh of nothing.
+    visibility.set_if_neq(if prints.soles.is_empty() { Visibility::Hidden } else { Visibility::Inherited });
+    if prints.soles.is_empty() {
         return;
     }
     let Some(mut mesh) = meshes.get_mut(&handle.0) else { return };
