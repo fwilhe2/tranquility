@@ -144,7 +144,7 @@ albedo, grip) and a ground. Everything else follows from the row:
 | Phobos | sub-Mars side | grooves and rubble at 0.0006 g; Mars 42° across |
 | Io | sulphur plains | frost, lava flows, tilted mountains, no craters; Jupiter |
 | Europa | ridged plains | double ridges in seven families, chaos, salt stains; Jupiter |
-| Enceladus | a tiger stripe | snow, folds, the stripe's trough; Saturn with its rings edge-on |
+| Enceladus | a tiger stripe | snow, folds, the stripe's trough and its jets of ice; Saturn with its rings edge-on |
 | Titan | a methane shore | cobbles of ice, channels, a sea, orange haze |
 | Pluto | Sputnik Planitia | convection cells, pit swarms, ice mountains; Charon |
 

@@ -31,7 +31,8 @@ use crate::Current;
 /// How a body's jets look.
 #[derive(Clone, Copy, Debug)]
 pub struct Plume {
-    /// Width at the vent and height of the visible column, m.
+    /// Width of the fan at the top of the visible column, and the
+    /// column's height, m. At the vent it is a twentieth as wide.
     pub width: f32,
     pub height: f32,
     pub color: [f32; 3],
@@ -84,15 +85,18 @@ fn column(seed: u32) -> Image {
     for j in 0..h {
         // v: 0 at the vent, 1 at the top.
         let v = 1.0 - (j as f32 + 0.5) / h as f32;
-        let spread = 0.12 + 0.88 * v.powf(0.6);
+        // A fan: a narrow throat that opens fast, then more slowly.
+        let spread = 0.05 + 0.95 * v.powf(0.55);
         for i in 0..w {
             let u = (i as f32 + 0.5) / w as f32 * 2.0 - 1.0;
             let x = u / spread;
-            // Streaks: noise across the column, stretched far along it.
-            let streak = 0.65 + 0.35 * fbm(x as f64 * 6.0, v as f64 * 0.6, 1.0, 4, 0.55, 300 + seed);
-            let body = (-3.0 * x * x).exp();
-            // Densest just above the vent; the top fades out.
-            let along = smoothstep(0.0, 0.04, v) * (1.0 - smoothstep(0.35, 1.0, v)).powf(0.8) * (1.0 - 0.4 * v);
+            // Streaks: noise across the fan, stretched along it, fading
+            // as the grains spread.
+            let streak = (1.0 + (0.6 - 0.3 * v) * fbm(x as f64 * 5.0, v as f64 * 0.8, 1.0, 4, 0.55, 300 + seed)).max(0.0);
+            let body = (-2.2 * x * x).exp();
+            // Densest just above the vent and thinning as it spreads (the
+            // same grains over a wider fan); the top fades out.
+            let along = smoothstep(0.0, 0.03, v) * (1.0 - smoothstep(0.4, 1.0, v)) * (0.25 + 0.75 * (0.05 / spread).powf(0.6));
             let a = (body * along * streak).clamp(0.0, 1.0);
             data.extend([255, 255, 255, (a * 255.0) as u8]);
         }
