@@ -250,7 +250,7 @@ under 2 ms.
 The far shadows (`horizon`) cost nothing measurable from a walker's eye,
 where the far ground is a thin band at the horizon, and about a fifth of
 the frame from 600 m up, where it is most of the picture (measured on the
-laptop's Intel UHD 620: 136 against 163 ms). The stroll, the sound and
+laptop's Intel UHD 620: 163 ms a frame with them, 136 without). The stroll, the sound and
 the figure under the eye cost the app's update well under a millisecond.
 
 The ground takes about ten seconds to stream in on two cores. The engine
