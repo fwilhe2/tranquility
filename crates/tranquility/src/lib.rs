@@ -130,6 +130,12 @@ pub fn app(world: WorldDef) -> App {
     app
 }
 
+/// Whether the app runs by itself, for a screenshot, a benchmark or a
+/// recording.
+pub fn unattended() -> bool {
+    ["TRANQUILITY_SCREENSHOT", "TRANQUILITY_BENCH", "TRANQUILITY_RECORD"].iter().any(|v| std::env::var_os(v).is_some())
+}
+
 /// F11: the whole screen and no frame, and back.
 fn full_screen(keys: Res<ButtonInput<KeyCode>>, mut window: Single<&mut Window>) {
     if keys.just_pressed(KeyCode::F11) {

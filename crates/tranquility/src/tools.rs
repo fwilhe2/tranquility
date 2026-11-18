@@ -9,6 +9,8 @@
 //! - `TRANQUILITY_SCREENSHOT=out.png` saves one frame once the terrain has
 //!   streamed in, then quits; `TRANQUILITY_SHOT_AFTER=seconds` waits longer.
 //! - `TRANQUILITY_RECORD=out.mp4` records a video offline (see `record`).
+//! - `TRANQUILITY_KEYS="2:KeyQ,4+3:KeyW"` presses keys by itself (see
+//!   `Script`).
 //! - `TRANQUILITY_BENCH=10` measures frame times for that many seconds once
 //!   the terrain has streamed in, prints them, then quits.
 
@@ -33,6 +35,12 @@ impl Plugin for ToolsPlugin {
         screenshot::add(app);
         #[cfg(not(target_arch = "wasm32"))]
         crate::record::add(app);
+        if crate::unattended() {
+            app.add_systems(PreUpdate, hands_off.before(bevy::input::InputSystems));
+        }
+        if let Some(keys) = std::env::var("TRANQUILITY_KEYS").ok().and_then(|v| Script::parse(&v)) {
+            app.insert_resource(keys).add_systems(PreUpdate, press.before(bevy::input::InputSystems).after(hands_off));
+        }
         if let Some(seconds) = env_f32("TRANQUILITY_BENCH") {
             app.insert_resource(Bench { seconds, frames: Vec::new(), since: None, began: None, busy: Vec::new() })
                 .add_systems(First, |mut bench: ResMut<Bench>| bench.began = Some(std::time::Instant::now()))
@@ -45,6 +53,103 @@ impl Plugin for ToolsPlugin {
                 .add_systems(Update, bench);
         }
     }
+}
+
+/// A run that saves a frame, measures or records goes by itself: keys
+/// and the mouse are dropped, so someone working at the machine meanwhile,
+/// with the window popping up under their hands, changes nothing in it.
+fn hands_off(
+    mut keys: ResMut<Messages<bevy::input::keyboard::KeyboardInput>>,
+    mut buttons: ResMut<Messages<bevy::input::mouse::MouseButtonInput>>,
+    mut motion: ResMut<Messages<bevy::input::mouse::MouseMotion>>,
+    mut wheel: ResMut<Messages<bevy::input::mouse::MouseWheel>>,
+) {
+    keys.clear();
+    buttons.clear();
+    motion.clear();
+    wheel.clear();
+}
+
+/// `TRANQUILITY_KEYS="2:KeyQ,4+3:KeyW,9:F11"`: keys pressed by themselves,
+/// seconds after the ground has settled (the screenshot's clock), held a
+/// frame or, after a `+`, that many seconds. For trying a key's effect in
+/// a screenshot without sitting at the window.
+#[derive(Resource)]
+struct Script {
+    /// When, for how long, which key; and whether it is down.
+    keys: Vec<(f32, f32, KeyCode, Stage)>,
+    settled: Option<f32>,
+}
+
+impl Script {
+    fn parse(v: &str) -> Option<Self> {
+        let keys = v
+            .split(',')
+            .map(|item| {
+                let (when, name) = item.trim().split_once(':')?;
+                let (at, hold) = when.split_once('+').map_or((when, "0"), |(a, h)| (a, h));
+                let code = key_named(name.trim());
+                if code.is_none() {
+                    warn!("TRANQUILITY_KEYS: no key named {name}");
+                }
+                Some((at.trim().parse().ok()?, hold.trim().parse().ok()?, code?, Stage::Waiting))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self { keys, settled: None })
+    }
+}
+
+/// A key by its `KeyCode` name: `KeyQ`, `Digit3`, `F11`, `Space`, ….
+fn key_named(name: &str) -> Option<KeyCode> {
+    use KeyCode::*;
+    let all = [
+        KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
+        Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, Escape, Space,
+        Enter, Tab, ShiftLeft, ShiftRight, BracketLeft, BracketRight, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
+    ];
+    all.into_iter().find(|k| format!("{k:?}") == name)
+}
+
+fn press(
+    time: Res<Time>,
+    terrain: Res<crate::terrain::Chunks>,
+    window: Single<Entity, With<bevy::window::PrimaryWindow>>,
+    mut script: ResMut<Script>,
+    mut input: MessageWriter<bevy::input::keyboard::KeyboardInput>,
+) {
+    use bevy::input::{ButtonState, keyboard::{Key, KeyboardInput}};
+    let t = time.elapsed_secs();
+    if script.settled.is_none() && t > 2.0 && terrain.is_settled() {
+        script.settled = Some(t);
+    }
+    let Some(settled) = script.settled else { return };
+    let t = t - settled;
+    for (at, hold, key, state) in &mut script.keys {
+        // Waiting, down, done: a tap is down for one frame.
+        let next = match *state {
+            Stage::Waiting if t >= *at => Stage::Down,
+            Stage::Down if t >= *at + *hold => Stage::Done,
+            s => s,
+        };
+        if next != *state {
+            *state = next;
+            input.write(KeyboardInput {
+                key_code: *key,
+                logical_key: Key::Unidentified(bevy::input::keyboard::NativeKey::Unidentified),
+                state: if next == Stage::Down { ButtonState::Pressed } else { ButtonState::Released },
+                text: None,
+                repeat: false,
+                window: *window,
+            });
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stage {
+    Waiting,
+    Down,
+    Done,
 }
 
 #[derive(Resource)]
