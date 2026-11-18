@@ -33,11 +33,13 @@ struct Figure {
     yaw: f32,
 }
 
-/// A limb's joint: leg or arm, left or right.
+/// A limb's joint: leg or arm, left or right, at the hip or shoulder, or
+/// (`lower`) at the knee or elbow.
 #[derive(Component)]
 struct Limb {
     leg: bool,
     left: bool,
+    lower: bool,
 }
 
 fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<PropMaterial>>) {
@@ -45,6 +47,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     let grey = materials.add(prop(StandardMaterial { base_color: Color::linear_rgb(0.2, 0.2, 0.21), perceptual_roughness: 0.9, reflectance: 0.2, ..default() }));
     let cube = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
     let ball = meshes.add(Sphere::new(1.0).mesh().ico(3).expect("valid subdivision"));
+    // Two units long and one across: scaled by (width, length / 2, depth).
     let tube = meshes.add(Capsule3d::new(0.5, 1.0));
     let part = |mesh: &Handle<Mesh>, material: &Handle<PropMaterial>, at: Vec3, size: Vec3| {
         (Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), Transform::from_translation(at).with_scale(size), RenderLayers::layer(SHADOW_ONLY))
@@ -52,24 +55,34 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     commands
         .spawn((Figure { yaw: 0.0 }, Transform::default(), Visibility::Hidden))
         .with_children(|body| {
-            // Forward is −z. Torso, the backpack behind it, the chest
-            // pack, and the helmet round the eye.
-            body.spawn(part(&cube, &cloth, Vec3::new(0.0, 1.2, 0.0), Vec3::new(0.5, 0.6, 0.3)));
-            body.spawn(part(&cube, &cloth, Vec3::new(0.0, 1.28, 0.27), Vec3::new(0.52, 0.72, 0.24)));
-            body.spawn(part(&cube, &grey, Vec3::new(0.0, 1.22, -0.2), Vec3::new(0.3, 0.22, 0.1)));
-            body.spawn(part(&ball, &cloth, Vec3::new(0.0, 1.62, 0.0), Vec3::splat(0.19)));
-            body.spawn(part(&cube, &cloth, Vec3::new(0.0, 0.88, 0.0), Vec3::new(0.46, 0.2, 0.28)));
+            // Forward is −z. A rounded torso and the trunk below it, the
+            // backpack square behind with the oxygen pack on top of it,
+            // the control box on the chest, and the helmet round the eye.
+            body.spawn(part(&tube, &cloth, Vec3::new(0.0, 1.2, 0.0), Vec3::new(0.48, 0.17, 0.3)));
+            body.spawn(part(&tube, &cloth, Vec3::new(0.0, 0.93, 0.0), Vec3::new(0.42, 0.08, 0.28)));
+            body.spawn(part(&cube, &cloth, Vec3::new(0.0, 1.24, 0.27), Vec3::new(0.48, 0.64, 0.22)));
+            body.spawn(part(&cube, &cloth, Vec3::new(0.0, 1.63, 0.25), Vec3::new(0.42, 0.15, 0.2)));
+            body.spawn(part(&cube, &grey, Vec3::new(0.0, 1.24, -0.19), Vec3::new(0.28, 0.18, 0.1)));
+            body.spawn(part(&ball, &cloth, Vec3::new(0.0, 1.6, -0.02), Vec3::new(0.18, 0.19, 0.19)));
             for left in [true, false] {
                 let x = if left { -1.0 } else { 1.0 };
-                // A leg: thigh and shin as one, and a boot.
-                body.spawn((Limb { leg: true, left }, Transform::from_xyz(0.13 * x, HIP, 0.0), Visibility::Inherited)).with_children(|leg| {
-                    leg.spawn(part(&tube, &cloth, Vec3::new(0.0, -0.4, 0.0), Vec3::new(0.2, 0.42, 0.2)));
-                    leg.spawn(part(&cube, &grey, Vec3::new(0.0, -0.84, -0.05), Vec3::new(0.15, 0.12, 0.33)));
+                // A leg: the thigh from the hip, the shin from the knee,
+                // and the boot.
+                body.spawn((Limb { leg: true, left, lower: false }, Transform::from_xyz(0.12 * x, HIP, 0.0), Visibility::Inherited)).with_children(|leg| {
+                    leg.spawn(part(&tube, &cloth, Vec3::new(0.0, -0.22, 0.0), Vec3::new(0.2, 0.24, 0.2)));
+                    leg.spawn((Limb { leg: true, left, lower: true }, Transform::from_xyz(0.0, -0.44, 0.0), Visibility::Inherited)).with_children(|shin| {
+                        shin.spawn(part(&tube, &cloth, Vec3::new(0.0, -0.2, 0.0), Vec3::new(0.17, 0.22, 0.17)));
+                        shin.spawn(part(&cube, &grey, Vec3::new(0.0, -0.4, -0.05), Vec3::new(0.15, 0.12, 0.31)));
+                    });
                 });
-                // An arm, hanging a little out from the body, and a glove.
-                body.spawn((Limb { leg: false, left }, Transform::from_xyz(0.32 * x, SHOULDER, 0.0), Visibility::Inherited)).with_children(|arm| {
-                    arm.spawn(part(&tube, &cloth, Vec3::new(0.03 * x, -0.3, 0.0), Vec3::new(0.15, 0.34, 0.15)));
-                    arm.spawn(part(&ball, &grey, Vec3::new(0.04 * x, -0.66, 0.0), Vec3::splat(0.075)));
+                // An arm, a little out from the body: the upper arm, the
+                // forearm from the elbow, and the glove.
+                body.spawn((Limb { leg: false, left, lower: false }, Transform::from_xyz(0.29 * x, SHOULDER, 0.0), Visibility::Inherited)).with_children(|arm| {
+                    arm.spawn(part(&tube, &cloth, Vec3::new(0.0, -0.15, 0.0), Vec3::new(0.15, 0.17, 0.15)));
+                    arm.spawn((Limb { leg: false, left, lower: true }, Transform::from_xyz(0.0, -0.3, 0.0), Visibility::Inherited)).with_children(|forearm| {
+                        forearm.spawn(part(&tube, &cloth, Vec3::new(0.0, -0.14, 0.0), Vec3::new(0.13, 0.15, 0.13)));
+                        forearm.spawn(part(&ball, &grey, Vec3::new(0.0, -0.32, 0.0), Vec3::splat(0.07)));
+                    });
                 });
             }
         });
@@ -123,8 +136,17 @@ fn pose(
     let swing = reach * (std::f32::consts::PI * gait.phase).cos();
     for (limb, mut joint) in &mut limbs {
         let down = if limb.left != gait.left { 1.0 } else { -1.0 };
-        // Arms swing against the legs, and less.
-        let angle = if limb.leg { swing * down } else { 0.08 - 0.45 * swing * down };
-        joint.rotation = Quat::from_rotation_x(angle);
+        // The leg swinging through bends at the knee to clear the ground;
+        // the one bearing the weight barely does.
+        let lifting = (std::f32::consts::PI * gait.phase).sin() * gait.swing;
+        let out = if limb.left { -1.0 } else { 1.0 };
+        joint.rotation = match (limb.leg, limb.lower) {
+            (true, false) => Quat::from_rotation_x(swing * down),
+            (true, true) => Quat::from_rotation_x(-(0.06 + if down < 0.0 { 0.75 * lifting } else { 0.05 * lifting })),
+            // Arms swing against the legs, and less, held a little out
+            // from the bulk of the suit.
+            (false, false) => Quat::from_rotation_z(0.14 * out) * Quat::from_rotation_x(0.08 - 0.45 * swing * down),
+            (false, true) => Quat::from_rotation_x(0.35 + 0.15 * gait.swing),
+        };
     }
 }
