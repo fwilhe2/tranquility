@@ -56,6 +56,22 @@ pub struct Recorder {
     resized: bool,
 }
 
+/// A recording cut short (the window closed, Ctrl-C, the GPU lost) is
+/// finished with what it has, so the frames already drawn come out as a
+/// video with its sound and not as a stray intermediate file.
+impl Drop for Recorder {
+    fn drop(&mut self) {
+        if !self.finished && self.encoder.is_some() {
+            self.finished = true;
+            warn!("record: stopped after {:.1} s of {}; finishing what there is", self.written as f32 / FPS as f32, self.seconds);
+            // The sound as far as the picture goes.
+            let samples = (self.written as usize * crate::sound::RATE as usize / FPS as usize) * 2;
+            self.sound.truncate(samples);
+            finish(self);
+        }
+    }
+}
+
 /// Whether this run records a video.
 pub fn recording() -> bool {
     std::env::var_os("TRANQUILITY_RECORD").is_some()
@@ -159,7 +175,12 @@ fn take(captured: On<ScreenshotCaptured>, mut recorder: ResMut<Recorder>) {
         let video = format!("{}.video.mp4", recorder.path);
         let size = format!("{}x{}", size.0, size.1);
         let rate = FPS.to_string();
-        let child = Command::new("ffmpeg")
+        let mut command = Command::new("ffmpeg");
+        // In a group of its own: Ctrl-C in the terminal is for the app,
+        // which then finishes the video; the encoder must not die first.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        let child = command
             .args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &size, "-r", &rate, "-i", "-"])
             // Even dimensions, for 4:2:0.
             .args(["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "slow", "-crf", "16", "-pix_fmt", "yuv420p", &video])
