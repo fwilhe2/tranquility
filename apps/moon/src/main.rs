@@ -17,6 +17,7 @@ mod gait;
 mod heavens;
 mod lander;
 mod options;
+mod picker;
 mod plumes;
 mod prints;
 mod rocks;
@@ -67,7 +68,7 @@ fn main() {
     let mut app = tranquility::app(start.world());
     app.insert_resource(Current(start))
         .insert_resource(Catalogue(bodies))
-        .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin, facts::FactsPlugin))
+        .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin, facts::FactsPlugin, picker::PickerPlugin))
         .add_systems(Update, (travel, describe));
     // MOON_OFF=rocks,heavens,prints,figure,lander,plumes,rover,heli leaves parts out, for measuring what
     // each costs.
@@ -102,10 +103,17 @@ fn main() {
 /// Number keys: another body.
 fn travel(mut commands: Commands, keys: Res<ButtonInput<KeyCode>>, bodies: Res<Catalogue>, mut current: ResMut<Current>) {
     for (key, body) in KEYS.iter().zip(&bodies.0) {
-        if keys.just_pressed(*key) && body.name != current.0.name {
-            current.0 = body.clone();
-            commands.insert_resource(body.world());
+        if keys.just_pressed(*key) {
+            visit(&mut commands, &mut current, body);
         }
+    }
+}
+
+/// Goes to a body, unless already there.
+pub fn visit(commands: &mut Commands, current: &mut Current, body: &Body) {
+    if body.name != current.0.name {
+        current.0 = body.clone();
+        commands.insert_resource(body.world());
     }
 }
 

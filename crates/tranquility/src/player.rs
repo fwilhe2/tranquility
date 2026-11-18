@@ -35,7 +35,7 @@ pub struct Walking;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostStartup, spawn).add_systems(
+        app.init_resource::<PointerOverUi>().add_systems(PostStartup, spawn).add_systems(
             Update,
             (
                 respawn.run_if(crate::world_replaced),
@@ -48,6 +48,12 @@ impl Plugin for PlayerPlugin {
         );
     }
 }
+
+/// Set by an app, each frame before [`Walking`], while the pointer is over
+/// something of its own to click (a menu): a click there does not take the
+/// mouse.
+#[derive(Resource, Default)]
+pub struct PointerOverUi(pub bool);
 
 /// What something other than the keyboard asks of the walker: an app that
 /// walks by itself holds the stick here, and everything downstream (grip,
@@ -177,8 +183,11 @@ fn grab_cursor(
     mut cursor: Single<&mut CursorOptions>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
+    over: Res<PointerOverUi>,
 ) {
-    if mouse.just_pressed(MouseButton::Left) {
+    // A click on something an app shows to be clicked is that thing's,
+    // not a request for the mouse.
+    if mouse.just_pressed(MouseButton::Left) && !over.0 {
         cursor.visible = false;
         cursor.grab_mode = CursorGrabMode::Locked;
     }

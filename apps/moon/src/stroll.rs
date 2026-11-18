@@ -61,6 +61,14 @@ const DRIFT: f32 = 0.4;
 
 pub struct StrollPlugin;
 
+impl Stroll {
+    /// Starts it as on arriving (out of black, with the title), as soon as
+    /// the walker is free: what `MOON_STROLL` does, from inside the app.
+    pub fn ask(&mut self) {
+        self.pending = true;
+    }
+}
+
 impl Plugin for StrollPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Stroll>()

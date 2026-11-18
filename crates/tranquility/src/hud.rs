@@ -33,6 +33,9 @@ pub struct Hud {
     pub mode: String,
     /// No text at all: `H`, or an app that wants a clean picture.
     pub hidden: bool,
+    /// Room an app's own panel takes along the bottom of the window, px:
+    /// the help line stands above it.
+    pub lift: f32,
     /// A line said in answer to a key, for a few seconds (see `say`).
     notice: (String, u32),
 }
@@ -171,8 +174,9 @@ fn update(
     player: Single<(&Player, &Transform)>,
     status: Single<(&mut Text, &mut Status), (Without<Info>, Without<Help>)>,
     mut info: Single<&mut Text, (With<Info>, Without<Help>)>,
-    mut help: Single<&mut Text, With<Help>>,
+    help: Single<(&mut Text, &mut Node), With<Help>>,
 ) {
+    let (mut help, mut help_node) = help.into_inner();
     let (mut text, mut status) = status.into_inner();
     status.frames += 1;
     status.elapsed += time.delta_secs();
@@ -219,6 +223,10 @@ fn update(
         );
         if help.0 != keys {
             help.0 = keys;
+        }
+        let bottom = px(10.0 + hud.lift);
+        if help_node.bottom != bottom {
+            help_node.bottom = bottom;
         }
     }
 }

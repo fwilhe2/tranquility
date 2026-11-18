@@ -101,7 +101,7 @@ fn fill(mut commands: Commands, current: Res<Current>, font: Res<HudFont>, page:
 
 /// Looking at a planet or moon in the sky names it, with its size from
 /// here and a sentence from the body's row.
-fn gaze(current: Res<Current>, hud: Res<Hud>, eye: Single<&Transform, With<Player>>, line: Single<(&mut Gaze, &mut Text, &mut Visibility)>) {
+fn gaze(current: Res<Current>, hud: Res<Hud>, picker: Option<Res<crate::picker::Picker>>, eye: Single<&Transform, With<Player>>, line: Single<(&mut Gaze, &mut Text, &mut Visibility)>) {
     let (mut gaze, mut text, mut visibility) = line.into_inner();
     let ahead = eye.forward();
     let seen = current.0.companions.iter().position(|c| {
@@ -116,7 +116,8 @@ fn gaze(current: Res<Current>, hud: Res<Hud>, eye: Single<&Transform, With<Playe
             text.0 = format!("{}, {across}° across from here. {}", c.name, c.about);
         }
     }
-    visibility.set_if_neq(if gaze.0.is_some() && !hud.hidden { Visibility::Inherited } else { Visibility::Hidden });
+    let titled = picker.is_some_and(|p| p.titled());
+    visibility.set_if_neq(if gaze.0.is_some() && !hud.hidden && !titled { Visibility::Inherited } else { Visibility::Hidden });
 }
 
 /// What follows from the row: size, pull, escape, horizon, sunlight, air.

@@ -57,6 +57,16 @@ key whose effect would not show (sound, quality, air, the rover out of
 reach) says what it did, or why it did nothing, in the middle of the
 screen for a few seconds.
 
+`moon` opens as lunar-walk does: the body's title over the dimmed world,
+and along the bottom the solar system at true relative size, the sun
+cropped at the left. Click a system to zoom in (its planet grows into the
+left edge, its moons come in at true size among themselves) and a body to
+go there; walkable bodies are lit, the rest dimmed. **← →** move along it,
+**↓** zooms in, **↑** out, **Enter** goes. A click elsewhere takes the
+mouse and starts the walk ("or watch it walk itself" starts the stroll);
+**Esc** brings the strip back. Unattended runs never show it
+(`MOON_PICKER=1` or `=paused` does).
+
 In `moon`: **1**–**9** change body (`make run APP=moon` starts on the Moon;
 `TRANQUILITY_BODY=mars` or a first argument picks another), **R** climbs
 into the rover parked by the landing site and out again (walk up to it
