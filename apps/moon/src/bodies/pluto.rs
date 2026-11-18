@@ -131,6 +131,15 @@ fn air() -> Air {
 pub fn body() -> Body {
     Body {
         note: "The plain is nitrogen ice, slowly overturning; the mountains are water ice. Noon here is as bright as a living room.",
+        facts: &[
+            ("Heart", "Sputnik Planitia: a plain of nitrogen ice some 1,000 km across, without a single crater; it turns over slowly in cells tens of kilometres wide."),
+            ("Mountains", "Water ice, frozen hard as rock, standing kilometres high round the plain; smaller blocks of it drift on the nitrogen like icebergs."),
+            ("Air", "A thin nitrogen air at about a hundred-thousandth of Earth's pressure, with blue haze layers high above."),
+            ("Heat", "About −230 °C."),
+            ("Light", "The sun is a point too bright to look at, but its light is a fifteen-hundredth of Earth's."),
+            ("Charon", "Half Pluto's size and locked face to face with it: from this side it hangs in one place in the sky, 6.4 days round."),
+            ("Visits", "New Horizons flew past on 14 July 2015, 85 years after Clyde Tombaugh found Pluto."),
+        ],
         gravity: 0.62,
         radius: 1_188_300.0,
         au: 39.5,

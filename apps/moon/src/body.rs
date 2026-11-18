@@ -72,6 +72,9 @@ pub struct Body {
     pub site: &'static str,
     /// A line for the screen: what to look for.
     pub note: &'static str,
+    /// What there is to know about it, a heading and a sentence or two
+    /// each: shown on `I`.
+    pub facts: &'static [(&'static str, &'static str)],
     /// Surface gravity, m/s².
     pub gravity: f32,
     /// Mean radius, m.
@@ -133,6 +136,7 @@ impl Body {
             name,
             site,
             note: "",
+            facts: &[],
             gravity: 1.62,
             radius: 1_737_400.0,
             au: 1.0,

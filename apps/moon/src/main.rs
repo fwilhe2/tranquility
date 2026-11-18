@@ -11,6 +11,7 @@
 mod bodies;
 mod body;
 mod craters;
+mod facts;
 mod figure;
 mod gait;
 mod heavens;
@@ -66,7 +67,7 @@ fn main() {
     let mut app = tranquility::app(start.world());
     app.insert_resource(Current(start))
         .insert_resource(Catalogue(bodies))
-        .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin))
+        .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin, facts::FactsPlugin))
         .add_systems(Update, (travel, describe));
     // MOON_OFF=rocks,heavens,prints,figure,lander,plumes,rover,heli leaves parts out, for measuring what
     // each costs.
@@ -132,5 +133,11 @@ fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>,
         b.note,
     );
     let names: Vec<String> = bodies.0.iter().enumerate().map(|(k, b)| format!("{} {}", k + 1, b.name)).collect();
-    hud.keys = format!("0: stroll (it walks, you watch; T tours the bodies){}\n{}", if b.rover { "   R: drive the rover" } else { "" }, names.join("  "));
+    let ride = match (b.rover, b.craft) {
+        (true, Some(c)) => format!("   R: drive the rover, fly {}", c.name()),
+        (true, None) => "   R: drive the rover".to_string(),
+        (false, Some(c)) => format!("   R: fly {}", c.name()),
+        (false, None) => String::new(),
+    };
+    hud.keys = format!("0: stroll (T tours the bodies){ride}   I: about {}\n{}", b.name, names.join("  "));
 }

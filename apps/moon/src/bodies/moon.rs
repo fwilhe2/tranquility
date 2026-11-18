@@ -117,6 +117,14 @@ impl Land for Moon {
 pub fn body() -> Body {
     Body {
         note: "The highlands to the north are kilometres high and further than they look: nothing in the vacuum says how far.",
+        facts: &[
+            ("Day", "It keeps one face to the Earth; from sunrise to sunrise is 29.5 Earth days, two weeks of sun and two of night."),
+            ("Heat", "Around 120 °C at noon on the equator, around −170 °C before dawn."),
+            ("Seas and highlands", "The dark plains are basalt lava that flooded the great basins 3 to 4 billion years ago; the bright highlands are older crust, light anorthosite."),
+            ("Regolith", "Every surface is ground to powder by 4 billion years of impacts, metres deep on the plains: it clings, it is sharp, and boots sink a centimetre or two."),
+            ("Earth", "Hangs nearly still in the sky, nearly four times as wide as the Moon looks from Earth, and goes through phases opposite to the Moon's."),
+            ("Visits", "Twelve people walked here between 1969 and 1972, on Apollo 11, 12 and 14 to 17. Chang'e 4 landed on the far side in 2019; Chang'e 6 brought samples back from it in 2024."),
+        ],
         rocks: Rocks { density: 0.12, largest: 5.0, albedo: [0.09, 0.145], tint: [1.03, 1.0, 0.95], ..default() },
         // The Earth, four times the size the Moon shows us, hardly moves
         // in the lunar sky.

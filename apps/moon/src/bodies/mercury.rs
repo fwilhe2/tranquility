@@ -80,6 +80,15 @@ pub fn body() -> Body {
     };
     Body {
         note: "The sun is two and a half times the width it has from Earth. The cliff to the north is a thrust fault: the planet has shrunk.",
+        facts: &[
+            ("Day", "It turns once in 59 Earth days but goes round the sun in 88, so from noon to noon is 176 days: two of its years."),
+            ("Heat", "Over 400 °C at noon near the equator, below −170 °C at night: no air carries the heat round."),
+            ("Inside", "An iron core reaching out to some 85 % of the radius, under a thin rocky mantle and crust."),
+            ("Scarps", "Cliffs hundreds of kilometres long and up to 3 km high are thrust faults: as the core cooled the planet shrank by several kilometres in radius, and the crust buckled."),
+            ("Caloris", "An impact basin some 1,500 km across; opposite it on the globe the ground is broken into hills by the shock that ran round the planet."),
+            ("Ice", "Water ice lies in craters at the poles whose floors the sun has never reached."),
+            ("Visits", "Mariner 10 flew past three times in 1974–75; MESSENGER orbited from 2011 to 2015; BepiColombo, launched in 2018, is due in orbit in late 2026."),
+        ],
         gravity: 3.70,
         radius: 2_439_700.0,
         au: 0.387,

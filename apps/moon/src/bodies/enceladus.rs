@@ -130,6 +130,15 @@ pub fn body() -> Body {
     };
     Body {
         note: "The trough to the north is a tiger stripe: the ocean vents through it. Saturn does not move; its rings are edge-on from here.",
+        facts: &[
+            ("Bright", "The most reflective body in the solar system: fresh snow over everything, falling back from its own jets."),
+            ("Tiger stripes", "Four parallel fractures some 130 km long at the south pole, warmer than their surroundings, vent water from an ocean below."),
+            ("Plumes", "Cassini flew through them and tasted water, salt, silica, organic molecules and hydrogen: an ocean in contact with hot rock."),
+            ("Rings", "The plumes feed Saturn's broad E ring."),
+            ("Heat", "About −200 °C away from the stripes."),
+            ("Saturn", "Some 30° across in the sky and fixed there; the rings are seen edge-on, because Enceladus orbits in their plane, every 33 hours."),
+            ("Visits", "Voyager 2 saw its youth in 1981; Cassini discovered the plumes in 2005 and flew through them repeatedly until 2015."),
+        ],
         gravity: 0.113,
         radius: 252_100.0,
         au: 9.58,

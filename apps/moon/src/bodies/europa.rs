@@ -136,6 +136,15 @@ pub fn body() -> Body {
     };
     Body {
         note: "Ridges across ridges across ridges: each is a crack that opened and closed with the tide. The brown is salt from the ocean below.",
+        facts: &[
+            ("Ocean", "Under an ice shell some 15 to 25 km thick lies a salty ocean perhaps 100 km deep: more water than all of Earth's oceans."),
+            ("Young", "Few craters: the surface is perhaps 60 million years old, renewed by the ice moving."),
+            ("Lines", "Double ridges, bands and chaos regions: cracks opened and closed by Jupiter's tides, ice upwelling from below."),
+            ("Brown", "The reddish brown in the cracks is salt from the ocean, coloured by Jupiter's radiation."),
+            ("Heat", "About −160 °C at the equator at noon, −220 °C at the poles."),
+            ("Jupiter", "Twelve degrees across in the sky; Europa goes round it in 3.6 days, one face always toward it."),
+            ("Visits", "Galileo found the signs of the ocean in the 1990s. Europa Clipper, launched in 2024, is due at Jupiter in 2030 to fly by dozens of times."),
+        ],
         gravity: 1.315,
         radius: 1_560_800.0,
         au: 5.2,

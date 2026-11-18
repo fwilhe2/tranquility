@@ -161,6 +161,15 @@ pub fn body() -> Body {
     };
     Body {
         note: "The dust in the air lights the shadows and hides the stars. Look toward the sun: the glow round it is blue.",
+        facts: &[
+            ("Day", "A sol is 24 h 40 min; a year is 687 Earth days, so its seasons are twice as long as ours."),
+            ("Air", "95 % carbon dioxide at about 6 millibars: a hundredth of the air pressure at sea level on Earth, too thin for liquid water to last at the surface."),
+            ("Heat", "About −60 °C on average; a summer noon at the equator can reach 20 °C at the ground, a polar winter night −125 °C."),
+            ("Sky", "Fine dust makes the day sky butterscotch and the sunset blue: the grains scatter blue light forward, round the sun. Dust storms can cover the whole planet for months."),
+            ("Giants", "Olympus Mons stands about 22 km high; the canyons of Valles Marineris run some 4,000 km and reach 7 km deep."),
+            ("Moons", "Phobos and Deimos, small and dark, probably captured or knocked off by an impact. Phobos crosses the sky west to east twice a day."),
+            ("Visits", "Viking 1 and 2 landed in 1976; Sojourner rolled in 1997; Spirit, Opportunity, Curiosity, Perseverance and China's Zhurong have driven here since. Ingenuity, which came with Perseverance, made the first powered flights on another planet: 72 of them, 2021 to 2024."),
+        ],
         gravity: 3.72,
         radius: 3_389_500.0,
         au: 1.524,

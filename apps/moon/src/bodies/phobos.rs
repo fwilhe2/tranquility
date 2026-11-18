@@ -93,6 +93,15 @@ pub fn body() -> Body {
     };
     Body {
         note: "Walking is not a thing you can do here. Space jumps (you will be a while); in flight WASD, Space and C fire the suit's jets.",
+        facts: &[
+            ("Shape", "A lump 27 × 22 × 18 km, not round: too small for its own gravity to pull it into a ball."),
+            ("Gravity", "About a two-thousandth of Earth's: a jump at walking pace would leave it for good; escape velocity is about 11 m/s."),
+            ("Orbit", "It goes round Mars in 7 h 39 min, only 6,000 km above the ground, faster than Mars turns: it rises in the west. Tides pull it lower every year; in some tens of millions of years it will break up or fall."),
+            ("Mars", "Fills more than 40° of the sky from this side, and goes through phases as Phobos goes round."),
+            ("Stickney", "A crater 9 km across, nearly half the moon's width: the blow that made it almost broke Phobos apart."),
+            ("Grooves", "Long parallel furrows run across the surface; whether they are cracks or the tracks of debris is still argued."),
+            ("Visits", "Seen up close by Mariner 9, the Vikings, Mars Express and the Soviet Phobos 2. Japan's MMX is to land and bring a sample home."),
+        ],
         gravity: 0.0057,
         radius: 11_100.0,
         au: 1.524,

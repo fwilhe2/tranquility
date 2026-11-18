@@ -133,6 +133,15 @@ fn air() -> Air {
 pub fn body() -> Body {
     Body {
         note: "The sea is liquid methane, and the cobbles are water ice. In air this thick and gravity this weak, a jump is a slow fall.",
+        facts: &[
+            ("Air", "95 % nitrogen with a few percent methane, 1.5 bar at the ground and four times as dense as Earth's air. Someone in a suit with wings on their arms could fly."),
+            ("Heat", "About −179 °C (94 K), the same day and night."),
+            ("Rain", "Methane and ethane do what water does on Earth: clouds, rain, rivers, lakes and seas. Kraken Mare is larger than the Caspian Sea."),
+            ("Ground", "Water ice as hard as rock; organic sand blown into dunes along the equator; rounded ice cobbles where rivers ran."),
+            ("Light", "Orange haze lets through about a tenth of the sunlight that reaches Saturn: noon is perhaps a thousandth as bright as on Earth."),
+            ("Day", "It keeps one face to Saturn, going round every 16 days; Saturn is behind the haze."),
+            ("Visits", "Huygens landed on 14 January 2005 on a plain of ice pebbles; Cassini mapped it by radar for 13 years. Dragonfly is due to launch in 2028 and to fly from place to place from 2034."),
+        ],
         gravity: 1.352,
         radius: 2_574_700.0,
         au: 9.58,

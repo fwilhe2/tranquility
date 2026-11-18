@@ -109,6 +109,15 @@ impl Land for Io {
 pub fn body() -> Body {
     Body {
         note: "No craters: the ground here is younger than a human lifetime. The black tongues are lava; the mountain is a tilted block of crust.",
+        facts: &[
+            ("Volcanoes", "The most volcanic body known: hundreds of active volcanoes, lava lakes, fountains, and plumes hundreds of kilometres high."),
+            ("Why", "Jupiter's tides flex it every orbit, and Europa and Ganymede keep its orbit from settling (their periods go 1 : 2 : 4); the flexing heats the inside."),
+            ("Colours", "Sulphur and frozen sulphur dioxide: yellow, white, orange and red, with black silicate lava flows over it."),
+            ("Jupiter", "Nearly 20° across in the sky and never moving: Io keeps one face to it, going round every 42 hours."),
+            ("Radiation", "Io orbits inside Jupiter's radiation belts: unshielded, a person would take a lethal dose within hours."),
+            ("Loki", "Loki Patera, a lava lake some 200 km across, brightens and dims as its crust founders every year or so."),
+            ("Visits", "Voyager 1 found the volcanoes in 1979; Galileo watched them for years; Juno flew close in 2023 and 2024."),
+        ],
         gravity: 1.796,
         radius: 1_821_600.0,
         au: 5.2,
