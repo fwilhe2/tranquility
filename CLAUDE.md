@@ -18,6 +18,7 @@ TRANQUILITY_BODY=mars target/debug/moon          # or a first argument
 TRANQUILITY_BENCH=10 TRANQUILITY_VSYNC=off target/debug/moon   # frame times
 MOON_DRIVE=chase,go TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # at the rover's wheel
 TRANQUILITY_SITE=olympus TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # at a real site (N cycles them)
+make gallery   # or tools/gallery.sh gale titan: the README's pictures in docs/gallery, high quality, no text (TRANQUILITY_CLEAN=1)
 MOON_FLY=behind,up TRANQUILITY_BODY=mars TRANQUILITY_SHOT_AFTER=12 TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # flying Ingenuity
 MOON_STROLL=1 TRANQUILITY_SHOT_AFTER=40 TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # 40 s into the stroll
 TRANQUILITY_SIZE=640x360 TRANQUILITY_RECORD=out.mp4 TRANQUILITY_RECORD_SECONDS=6 MOON_STROLL=1 target/debug/moon   # a video, offline, with sound

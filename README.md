@@ -13,6 +13,46 @@ Three worlds show the range:
 | `moon` | nine bodies from Mercury to Pluto, the Moon among them, each unbounded | procedural grounds that never repeat, round worlds with true horizons, real gravity for a suited walker, other atmospheres (Mars, Titan, Pluto), planets in the sky at true size, a drivable rover, helicopters where the air will hold one up (Ingenuity on Mars, Dragonfly on Titan), a stroll that walks itself and records itself, sound through the suit |
 | `island` | an endless island landscape | the smallest complete world: noise heights, sea, Earth's atmosphere and a daily sun |
 
+## Gallery
+
+Rendered by the engine at high quality (`make gallery`, or
+`tools/gallery.sh name…` for some): the real places from public-domain
+NASA maps, and the bodies' own invented ground.
+
+<!-- gallery: written by tools/gallery.sh -->
+
+![The Moon: Hadley–Apennine, where Apollo 15 landed, with Mons Hadley to the north-east (LOLA heights, Clementine albedo)](docs/gallery/moon-hadley.jpg)
+*The Moon: Hadley–Apennine, where Apollo 15 landed, with Mons Hadley to the north-east (LOLA heights, Clementine albedo)*
+
+![Flying the lunar module's last minute down to Hadley, a few metres up in P65](docs/gallery/moon-descent.jpg)
+*Flying the lunar module's last minute down to Hadley, a few metres up in P65*
+
+![On the floor of Copernicus, its central peaks ahead](docs/gallery/moon-copernicus.jpg)
+*On the floor of Copernicus, its central peaks ahead*
+
+![Mars: Gale crater from Bradbury Landing, Mount Sharp 50 km off (MOLA heights, Viking colour)](docs/gallery/mars-gale.jpg)
+*Mars: Gale crater from Bradbury Landing, Mount Sharp 50 km off (MOLA heights, Viking colour)*
+
+![The rim of Olympus Mons's summit caldera, 21 km up, the sky dark overhead](docs/gallery/mars-olympus.jpg)
+*The rim of Olympus Mons's summit caldera, 21 km up, the sky dark overhead*
+
+![Ingenuity climbing away at Jezero, flown through the rotor physics](docs/gallery/mars-ingenuity.jpg)
+*Ingenuity climbing away at Jezero, flown through the rotor physics*
+
+![Io's sulphur plains under Jupiter, twenty degrees across](docs/gallery/io-jupiter.jpg)
+*Io's sulphur plains under Jupiter, twenty degrees across*
+
+![Enceladus: a tiger stripe venting, Saturn's rings edge-on](docs/gallery/enceladus.jpg)
+*Enceladus: a tiger stripe venting, Saturn's rings edge-on*
+
+![Titan: the shore of a methane sea under orange haze](docs/gallery/titan.jpg)
+*Titan: the shore of a methane sea under orange haze*
+
+![Pluto: Sputnik Planitia's nitrogen ice, Charon in the sky](docs/gallery/pluto.jpg)
+*Pluto: Sputnik Planitia's nitrogen ice, Charon in the sky*
+
+<!-- /gallery -->
+
 ## Run
 
 Rust 1.97+.

@@ -7,6 +7,7 @@
 #
 # make shot APP=… OUT=…png [POSE=x,y,z,yaw,pitch] [HOUR=…]  saves a frame.
 #
+# make gallery                    the README's pictures, rendered again
 # make stroll                     the moon app touring its bodies, hands off
 # make video [VIDEO=stroll.mp4] [SECONDS=600] [SIZE=1920x1080] [QUALITY=high]
 #                                 records that, offline, smooth at 60 fps
@@ -18,7 +19,7 @@ SECONDS ?= 600
 SIZE ?= 1920x1080
 QUALITY ?= high
 
-.PHONY: run release web serve shot stroll video check clean
+.PHONY: run release web serve shot stroll video gallery check clean
 
 # wasm-bindgen's CLI must match the crate version in Cargo.lock exactly, so a
 # matching copy is installed into .tools/ instead of relying on a global one.
@@ -44,6 +45,10 @@ check:
 shot:
 	cargo build -p $(APP)
 	TRANQUILITY_SCREENSHOT=$(OUT) TRANQUILITY_POSE=$(POSE) TRANQUILITY_HOUR=$(HOUR) target/debug/$(APP)
+
+# The README's gallery: docs/gallery/*.jpg, high quality, no text.
+gallery:
+	tools/gallery.sh
 
 stroll:
 	cargo build --release -p moon

@@ -49,6 +49,8 @@ impl Hud {
     }
 }
 
+static CLEAN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
 /// The notice's line.
 #[derive(Component)]
 struct Notice;
@@ -85,7 +87,10 @@ fn shadow() -> TextShadow {
 /// built-in font is a small subset that lacks ß, dashes and the degree sign.
 const FONT: &[u8] = include_bytes!("../assets/fonts/LiberationSans-Regular.ttf");
 
-fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
+fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>, mut hud: ResMut<Hud>) {
+    if std::env::var_os("TRANQUILITY_CLEAN").is_some() {
+        hud.hidden = true;
+    }
     let handle = fonts.add(Font::from_bytes(FONT.to_vec()));
     commands.insert_resource(HudFont(handle.clone()));
     let font = TextFont {
@@ -151,17 +156,21 @@ fn quality_said(quality: Res<Quality>, mut hud: ResMut<Hud>) {
 }
 
 /// Shows the latest notice for three seconds, fading out.
-fn notice(time: Res<Time<Real>>, hud: Res<Hud>, line: Single<(&mut Text, &mut TextColor), With<Notice>>, mut since: Local<(u32, f32)>) {
-    let (mut text, mut colour) = line.into_inner();
+fn notice(time: Res<Time<Real>>, hud: Res<Hud>, line: Single<(&mut Text, &mut TextColor, &mut Visibility), With<Notice>>, mut since: Local<(u32, f32)>) {
+    let (mut text, mut colour, mut visibility) = line.into_inner();
     let t = time.elapsed_secs();
     if hud.notice.1 != since.0 {
         *since = (hud.notice.1, t);
         text.0.clone_from(&hud.notice.0);
     }
-    let alpha = if hud.notice.1 == 0 { 0.0 } else { ((3.0 - (t - since.1)) / 0.6).clamp(0.0, 1.0) * 0.9 };
+    // TRANQUILITY_CLEAN=1: no text at all, notices included, for pictures.
+    let clean = *CLEAN.get_or_init(|| std::env::var_os("TRANQUILITY_CLEAN").is_some());
+    let alpha = if hud.notice.1 == 0 || clean { 0.0 } else { ((3.0 - (t - since.1)) / 0.6).clamp(0.0, 1.0) * 0.9 };
     if colour.0.alpha() != alpha {
         colour.0 = Color::srgba(1.0, 1.0, 1.0, alpha);
     }
+    // Gone, not just clear: its shadow would still draw.
+    visibility.set_if_neq(if alpha > 0.0 { Visibility::Inherited } else { Visibility::Hidden });
 }
 
 fn update(

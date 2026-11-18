@@ -11,6 +11,8 @@
 //! - `TRANQUILITY_RECORD=out.mp4` records a video offline (see `record`).
 //! - `TRANQUILITY_KEYS="2:KeyQ,4+3:KeyW"` presses keys by itself (see
 //!   `Script`).
+//! - `TRANQUILITY_CLEAN=1` shows no text at all, notices included: for
+//!   pictures.
 //! - `TRANQUILITY_BENCH=10` measures frame times for that many seconds once
 //!   the terrain has streamed in, prints them, then quits.
 

@@ -390,7 +390,9 @@ fn burn(time: Res<Time>, world: Res<WorldDef>, origin: Res<Origin>, mut landers:
     if world.is_changed() {
         lattice.clear();
     }
-    let dt = time.delta_secs().min(0.05);
+    // The whole frame, in as many steps as it takes: a slow frame must not
+    // slow the flight down against everything else.
+    let dt = time.delta_secs().min(0.25);
     if dt <= 0.0 {
         return;
     }
