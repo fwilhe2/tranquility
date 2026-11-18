@@ -18,6 +18,12 @@
 //! carries everything; its winds are slow. Both follow from the body's
 //! `air_density` and `wind`: nothing here is set per body.
 //!
+//! A helicopter is heard only through the air: the buzz of its blades
+//! passing (2537 rpm and two blades make Ingenuity's 85 Hz, which
+//! Perseverance's microphones caught from 80 m away) and the hiss off
+//! their tips, louder the harder the rotors work and the nearer you are,
+//! and on Mars dull and faint, as that recording is.
+//!
 //! Everything is synthesised from noise and oscillators
 //! (`tranquility::sound`). `MOON_SOUND_WAV=out.wav` renders a minute of a
 //! walk to a file instead of running the app, for measuring what cannot be
@@ -35,8 +41,10 @@ use crate::{
     Current,
     body::Body,
     gait::{Footfall, Striding},
+    rotorcraft::Helicopter,
     rover::{Driving, Rover},
 };
+use tranquility::rotor::Rotorcraft;
 
 /// Everything is this much louder than lunar-walk's levels, which leaned
 /// on a compressor.
@@ -78,6 +86,9 @@ struct Said {
     jets: f32,
     /// The rover you sit in: speed as a share of 13 km/h, and throttle.
     rover: Option<(f32, f32)>,
+    /// A rotorcraft turning: blade-passage frequency, Hz; level at the
+    /// ear before the air takes its share; and −1 left to 1 right.
+    rotor: Option<(f32, f32, f32)>,
     /// Boots come down since the last block: strength, and −1 left to 1.
     steps: Vec<(f32, f32)>,
     /// 0–1: how much of it to hear (the picture's fades take the sound
@@ -140,6 +151,14 @@ pub struct Suit {
     wind: [Biquad; 2],
     wind_level: Glide,
     gust_in: f32,
+    rotor: Wave,
+    thump: Wave,
+    rotor_band: Biquad,
+    tips: Biquad,
+    rotor_pitch: Glide,
+    rotor_level: Glide,
+    rotor_pan: Glide,
+    tips_at: f32,
     /// Fades in at the start.
     master: Glide,
 }
@@ -177,6 +196,14 @@ impl Suit {
             wind: pair(Biquad::lowpass(380.0, 0.707)),
             wind_level: Glide::new(0.0, 1.5),
             gust_in: 0.0,
+            rotor: Wave::default(),
+            thump: Wave::default(),
+            rotor_band: Biquad::lowpass(900.0, 0.8),
+            tips: Biquad::bandpass(600.0, 0.9),
+            rotor_pitch: Glide::new(0.0, 0.1),
+            rotor_level: Glide::new(0.0, 0.1),
+            rotor_pan: Glide::new(0.0, 0.1),
+            tips_at: 600.0,
             master,
         }
     }
@@ -205,6 +232,21 @@ impl Suit {
             self.motor_pitch.send(speed, 0.08);
             self.motor_level.send(on * (0.012 + 0.05 * drive + 0.02 * speed.min(1.0)), 0.1);
             self.gear_level.send(on * 0.006 * speed.min(1.0), 0.1);
+            match said.rotor {
+                Some((bpf, level, pan)) => {
+                    self.rotor_pitch.send(bpf, 0.1);
+                    self.rotor_level.send(level, 0.1);
+                    self.rotor_pan.send(pan, 0.1);
+                    // The tips' turbulence sits a few octaves over the
+                    // buzz; retuned only when the rotor speed has moved.
+                    let centre = (6.0 * bpf).clamp(150.0, 4000.0);
+                    if (centre - self.tips_at).abs() > 0.05 * centre {
+                        self.tips_at = centre;
+                        self.tips.retune(Biquad::bandpass(centre, 0.9));
+                    }
+                }
+                None => self.rotor_level.send(0.0, 0.3),
+            }
             for (strength, pan) in said.steps.drain(..) {
                 let pitch = 1800.0 + 900.0 * self.noise.unit();
                 self.steps.push(Step {
@@ -343,6 +385,19 @@ impl Voice for Suit {
             }
         }
 
+        // A rotorcraft: the blades' passing, a buzz with a thump under it
+        // at the same rate, and the hiss off the tips. Only the air brings
+        // it.
+        let (rotor_level, rotor_pitch, pan) = (self.rotor_level.step(), self.rotor_pitch.step(), self.rotor_pan.step());
+        if rotor_level > 1e-5 && rotor_pitch > 1.0 {
+            let buzz = self.rotor_band.run(self.rotor.saw(rotor_pitch));
+            let thump = self.thump.sine(rotor_pitch);
+            let hiss = 2.0 * self.tips.run(b);
+            let sound = (0.7 * buzz + 0.9 * thump + 0.35 * hiss) * rotor_level;
+            air[0] += sound * (1.0 - 0.5 * pan.max(0.0));
+            air[1] += sound * (1.0 + 0.5 * pan.min(0.0));
+        }
+
         // Wind, where there is air to move.
         let wind = self.wind_level.step();
         if wind > 1e-5 {
@@ -386,11 +441,13 @@ fn tell(
     world: Res<WorldDef>,
     muted: Res<Muted>,
     driving: Option<Res<Driving>>,
-    player: Single<&Player>,
+    player: Single<(&Player, &Transform)>,
     rover: Option<Single<(&Vehicle, &Transform), With<Rover>>>,
+    craft: Option<Single<(&Rotorcraft, &Transform), With<Helicopter>>>,
     mut falls: MessageReader<Footfall>,
     stroll: Option<Res<crate::stroll::Stroll>>,
 ) {
+    let (player, ear) = player.into_inner();
     let Ok(mut said) = line.0.lock() else { return };
     said.medium = Medium::of(&current.0);
     // Down to a whisper while the picture is black, never quite silent.
@@ -406,6 +463,19 @@ fn tell(
         (Some(rover), true) => Some((rover.0.forward_speed(rover.1).abs() / 3.6, rover.0.throttle.abs())),
         _ => None,
     };
+    // Loading noise goes with the thrust and the tips' speed; the pressure
+    // falls off as one over the distance.
+    said.rotor = craft.and_then(|craft| {
+        let (rc, pose) = craft.into_inner();
+        let blades = rc.spec.rotors.first().map_or(2, |r| r.blades) as f32;
+        let bpf = rc.rpm / 60.0 * blades;
+        let thrust: f32 = rc.thrust.iter().sum();
+        let source = (thrust * rc.tip_mach()).sqrt() + 0.4 * (rc.rpm / rc.spec.rpm);
+        let to = pose.translation - ear.translation;
+        let distance = to.length().max(0.8);
+        let pan = to.normalize_or_zero().dot(*ear.right());
+        (bpf > 1.0).then_some((bpf, (0.05 * source / distance).min(0.12), pan))
+    });
     for fall in falls.read() {
         if !muted.0 {
             said.steps.push((fall.strength, if fall.left { -1.0 } else { 1.0 }));
@@ -484,6 +554,25 @@ mod tests {
     fn the_suit_is_never_silent_and_never_loud() {
         let level = standing(&body("Moon"));
         assert!((0.01..0.1).contains(&level), "{level}");
+    }
+
+    /// A rotor's level at the ear on a body, after the air has had it: two
+    /// suits alike in everything else, and what differs between them.
+    fn rotor_on(name: &str) -> f32 {
+        let said = || Arc::new(Mutex::new(Said { medium: Medium::of(&body(name)), level: 1.0, ..default() }));
+        let (with, without) = (said(), said());
+        with.lock().unwrap().rotor = Some((84.6, 0.05, 0.0));
+        let (mut a, mut b) = (Suit::new(with), Suit::new(without));
+        let diff: Vec<f32> = (0..3 * RATE as usize).map(|_| a.frame()[0] - b.frame()[0]).collect();
+        rms(&diff[RATE as usize..])
+    }
+
+    /// Nothing on an airless body, faint on Mars, plain on Titan.
+    #[test]
+    fn rotors_are_heard_as_the_air_carries_them() {
+        let (moon, mars, titan) = (rotor_on("Moon"), rotor_on("Mars"), rotor_on("Titan"));
+        assert!(moon.abs() < 1e-4, "{moon}");
+        assert!(mars > 0.001 && titan > 3.0 * mars, "Mars {mars}, Titan {titan}");
     }
 
     #[test]
