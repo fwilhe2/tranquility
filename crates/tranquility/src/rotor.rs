@@ -803,6 +803,22 @@ mod tests {
         assert!(c.wrecked.is_none());
     }
 
+    /// A battery that runs flat in flight: the rotors run down, the
+    /// thrust goes with them, and from a few metres the landing breaks it.
+    #[test]
+    fn a_flat_battery_brings_it_down() {
+        let (mut c, mut t) = mars(small());
+        c.running = true;
+        c.rpm = c.spec.rpm;
+        run(&mut c, &mut t, 3.72, 8.0, |c, s| c.command.up = if s < 3.0 { 1.5 } else { 0.0 });
+        assert!(c.height > 3.0, "only {} m up", c.height);
+        c.energy = 200.0;
+        run(&mut c, &mut t, 3.72, 10.0, |_, _| {});
+        assert_eq!(c.energy, 0.0);
+        assert!(c.grounded);
+        assert!(c.wrecked.is_some(), "landed softly at {:?}", c.velocity);
+    }
+
     /// With the rotors stopped in the air, it falls and breaks.
     #[test]
     fn a_fall_breaks_it() {
