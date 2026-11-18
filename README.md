@@ -150,7 +150,10 @@ and wind alone: on Mars six millibars of carbon dioxide bring the grit
 and the motors faintly and dully, and the wind is a rumble at the edge of
 hearing; Titan's air, four times as dense as ours, carries everything,
 and its winds are slow. Everything is synthesised as it plays; nothing is
-loaded. **M** mutes. Screenshot and benchmark runs are silent, and
+loaded. **M** mutes. If the audio device fails while the app runs
+(unplugged, switched, the sound server restarted), the app says so once,
+in the log and on the screen; the sound needs a restart to come back.
+Screenshot and benchmark runs are silent, and
 `MOON_SOUND_WAV=out.wav` renders a minute of a body's sound to a file.
 
 ## The moon app

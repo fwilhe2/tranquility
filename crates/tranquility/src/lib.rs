@@ -124,7 +124,11 @@ pub fn app(world: WorldDef) -> App {
             ..default()
         }),
         ..default()
-    }))
+    })
+    // When the audio device fails, rodio's stream reports it again and again,
+    // thousands of lines a second: `sound` watches the stream instead and
+    // says so once.
+    .set(bevy::log::LogPlugin { filter: format!("{},rodio::stream=off,cpal=off", bevy::log::DEFAULT_FILTER), ..default() }))
     .add_plugins(EnginePlugin(world))
     .add_systems(Update, full_screen);
     app

@@ -10,7 +10,14 @@
 //! (`TRANQUILITY_SCREENSHOT`, `TRANQUILITY_BENCH`) and `TRANQUILITY_SOUND=off`
 //! stay silent: see [`wanted`].
 
-use std::{f32::consts::TAU, sync::Mutex, time::Duration};
+use std::{
+    f32::consts::TAU,
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
 use bevy::{
     audio::{AddAudioSource, ChannelCount, Decodable, SampleRate, Source},
@@ -93,6 +100,10 @@ pub struct Stream {
     right: Option<f32>,
 }
 
+/// Frames the audio device has taken from all voices, ever: while sound
+/// plays this climbs 44,100 a second, and when it stops the device has.
+static PULLED: AtomicU64 = AtomicU64::new(0);
+
 impl Iterator for Stream {
     type Item = f32;
 
@@ -100,6 +111,7 @@ impl Iterator for Stream {
         if let Some(right) = self.right.take() {
             return Some(right);
         }
+        PULLED.fetch_add(1, Ordering::Relaxed);
         let [left, right] = self.voice.as_mut().map_or([0.0; 2], |v| v.frame());
         self.right = Some(right);
         Some(left)
@@ -141,6 +153,12 @@ pub struct SoundPlugin;
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         app.add_audio_source::<Synth>().init_resource::<Muted>().add_systems(Update, mute);
+        // In the browser the page holds sound back until it is clicked: a
+        // still stream there is no failure.
+        #[cfg(not(target_arch = "wasm32"))]
+        if wanted() {
+            app.add_systems(Update, watch);
+        }
         #[cfg(not(target_arch = "wasm32"))]
         if crate::record::recording() {
             app.init_resource::<Tape>().add_systems(Last, pull.before(crate::record::Rolling));
@@ -161,6 +179,27 @@ fn mute(keys: Res<ButtonInput<KeyCode>>, mut muted: ResMut<Muted>, mut hud: ResM
                 sink.unmute();
             }
         }
+    }
+}
+
+/// Says once, in the log and on the screen, when the audio device has
+/// stopped taking sound (unplugged, switched, the sound server gone), and
+/// again if it comes back.
+#[cfg(not(target_arch = "wasm32"))]
+fn watch(time: Res<Time<Real>>, mut hud: ResMut<crate::hud::Hud>, mut seen: Local<(u64, f32, bool)>) {
+    let (last, since, stalled) = &mut *seen;
+    let pulled = PULLED.load(Ordering::Relaxed);
+    let t = time.elapsed_secs();
+    if pulled != *last {
+        if *stalled {
+            info!("sound: the audio device is taking sound again");
+            hud.say("sound back");
+        }
+        (*last, *since, *stalled) = (pulled, t, false);
+    } else if pulled > 0 && !*stalled && t - *since > 2.0 {
+        *stalled = true;
+        error!("sound: the audio device has stopped taking sound (unplugged, switched, or the sound server restarted?); restart the app for sound");
+        hud.say("the sound device stopped: restart for sound");
     }
 }
 
