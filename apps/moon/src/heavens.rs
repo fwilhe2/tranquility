@@ -50,14 +50,26 @@ pub struct Companion {
     pub turn: [f32; 3],
     /// Rings, from and to, in the planet's radii.
     pub rings: Option<(f32, f32)>,
+    /// What it is called, and a sentence about it: shown while you look
+    /// at it.
+    pub name: &'static str,
+    pub about: &'static str,
 }
 
 impl Companion {
     pub fn new(map: Map, radius: f32, azimuth: f32, elevation: f32) -> Self {
-        Self { map, radius, azimuth, elevation, turn: [0.35, 2.1, 0.2], rings: None }
+        let name = match map {
+            Map::Earth => "Earth",
+            Map::Mars => "Mars",
+            Map::Jupiter => "Jupiter",
+            Map::Saturn => "Saturn",
+            Map::Charon => "Charon",
+            Map::Rock => "a small moon",
+        };
+        Self { map, radius, azimuth, elevation, turn: [0.35, 2.1, 0.2], rings: None, name, about: "" }
     }
 
-    fn direction(&self) -> Vec3 {
+    pub fn direction(&self) -> Vec3 {
         let (el, az) = (self.elevation.to_radians(), self.azimuth.to_radians());
         Vec3::new(el.cos() * az.sin(), el.sin(), -el.cos() * az.cos())
     }

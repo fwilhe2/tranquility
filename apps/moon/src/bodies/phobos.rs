@@ -110,7 +110,7 @@ pub fn body() -> Body {
         sun: (100.0, 22.0),
         rocks: Rocks { density: 0.1, largest: 8.0, albedo: [0.06, 0.1], tint: [1.08, 1.0, 0.9], ..default() },
         // Mars, 42° across from 6,000 km up.
-        companions: vec![Companion { turn: [0.2, 0.9, 0.1], ..Companion::new(Map::Mars, 21.2, 0.0, 33.0) }],
+        companions: vec![Companion { turn: [0.2, 0.9, 0.1], about: "Only 6,000 km below. Phobos goes round it in under eight hours, faster than Mars turns.", ..Companion::new(Map::Mars, 21.2, 0.0, 33.0) }],
         // The whole moon is a few kilometres round the curve.
         levels: 5,
         look: (0.0, 0.3),

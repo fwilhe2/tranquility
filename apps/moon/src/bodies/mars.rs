@@ -195,7 +195,14 @@ pub fn body() -> Body {
         exposure_bias: -0.9,
         // Dark basalt under a film of the bright dust.
         rocks: Rocks { density: 0.07, largest: 3.0, albedo: [0.07, 0.15], tint: [1.25, 0.92, 0.72], ..default() },
-        companions: vec![Companion::new(Map::Rock, 0.1, 250.0, 50.0), Companion::new(Map::Rock, 0.017, 140.0, 35.0)],
+        companions: vec![
+            Companion {
+                name: "Phobos",
+                about: "6,000 km up and less than half the width of the full Moon from Earth. It rises in the west and crosses the sky in about four hours.",
+                ..Companion::new(Map::Rock, 0.1, 250.0, 50.0)
+            },
+            Companion { name: "Deimos", about: "The outer moon, 20,000 km up: hardly more than a bright star.", ..Companion::new(Map::Rock, 0.017, 140.0, 35.0) },
+        ],
         look: (0.9, -0.06),
         ..Body::airless("Mars", "Layered buttes", Arc::new(land))
     }

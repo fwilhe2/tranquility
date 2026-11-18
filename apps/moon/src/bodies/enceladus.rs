@@ -153,7 +153,7 @@ pub fn body() -> Body {
         fill: 1.8,
         fill_color: Color::linear_rgb(0.85, 0.93, 1.0),
         rocks: Rocks { density: 0.12, largest: 14.0, albedo: [0.55, 0.85], tint: [0.9, 0.98, 1.05], roughness: 0.6, ..default() },
-        companions: vec![Companion { turn: [0.0, 1.0, 0.0], rings: Some((1.24, 2.27)), ..Companion::new(Map::Saturn, 14.7, 5.0, 11.5) }],
+        companions: vec![Companion { turn: [0.0, 1.0, 0.0], rings: Some((1.24, 2.27)), about: "238,000 km away. Enceladus orbits in the plane of the rings, so they show edge-on, as a line.", ..Companion::new(Map::Saturn, 14.7, 5.0, 11.5) }],
         plume: Some(Plume { width: 1000.0, height: 5000.0, color: [0.85, 0.92, 1.0], opacity: 0.3 }),
         // A 250 km moon: 12 km of ground is already well round the curve.
         levels: 7,

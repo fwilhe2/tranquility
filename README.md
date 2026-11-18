@@ -211,7 +211,8 @@ albedo, grip) and a ground. Everything else follows from the row:
   (escape velocity, the horizon, the sunlight and the sun's size against
   Earth's, the air and its speed of sound) and a few sentences each on
   the body's day, heat, air, the features that make it what it is, and
-  who has been there.
+  who has been there. Looking at a planet or moon in the sky names it, with its size
+  from here and a sentence about it.
 
 | Body | Site | What is there |
 |---|---|---|

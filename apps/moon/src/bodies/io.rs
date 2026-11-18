@@ -132,7 +132,7 @@ pub fn body() -> Body {
         fill: 1.4,
         fill_color: Color::linear_rgb(1.0, 0.95, 0.8),
         rocks: Rocks { density: 0.08, largest: 2.5, albedo: [0.04, 0.3], tint: [1.1, 0.95, 0.6], ..default() },
-        companions: vec![Companion { turn: [0.05, 4.4, 0.06], ..Companion::new(Map::Jupiter, 9.8, 335.0, 30.0) }],
+        companions: vec![Companion { turn: [0.05, 4.4, 0.06], about: "422,000 km away and eleven Earths wide. Its tides keep Io molten inside.", ..Companion::new(Map::Jupiter, 9.8, 335.0, 30.0) }],
         look: (0.45, 0.06),
         ..Body::airless("Io", "Sulphur plains", Arc::new(Io))
     }

@@ -159,7 +159,7 @@ pub fn body() -> Body {
         fill: 1.4,
         fill_color: Color::linear_rgb(0.9, 0.95, 1.0),
         rocks: Rocks { density: 0.07, largest: 6.0, albedo: [0.45, 0.72], tint: [0.95, 0.98, 1.05], roughness: 0.7, ..default() },
-        companions: vec![Companion { turn: [0.05, 4.4, 0.06], ..Companion::new(Map::Jupiter, 6.1, 20.0, 32.0) }],
+        companions: vec![Companion { turn: [0.05, 4.4, 0.06], about: "671,000 km away. Its tides flex Europa's ice and keep the ocean under it liquid.", ..Companion::new(Map::Jupiter, 6.1, 20.0, 32.0) }],
         look: (-0.25, 0.08),
         ..Body::airless("Europa", "Ridged plains", Arc::new(land))
     }

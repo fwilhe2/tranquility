@@ -12,7 +12,7 @@ pub struct FactsPlugin;
 
 impl Plugin for FactsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Open>().add_systems(PostStartup, setup).add_systems(Update, (toggle, fill).chain());
+        app.init_resource::<Open>().add_systems(PostStartup, setup).add_systems(Update, ((toggle, fill).chain(), gaze));
     }
 }
 
@@ -22,6 +22,10 @@ struct Open(bool);
 #[derive(Component)]
 struct Card;
 
+/// The line under the middle of the screen that names what you look at.
+#[derive(Component)]
+struct Gaze(Option<usize>);
+
 /// The text the card holds, as spans: headings brighter than what follows.
 #[derive(Component)]
 struct Page;
@@ -30,6 +34,16 @@ const HEADING: Color = Color::srgba(1.0, 0.86, 0.62, 0.95);
 const BODY: Color = Color::srgba(1.0, 1.0, 1.0, 0.86);
 
 fn setup(mut commands: Commands, font: Res<HudFont>) {
+    commands.spawn((
+        Gaze(None),
+        Text::new(""),
+        TextFont { font: font.0.clone().into(), font_size: FontSize::Px(15.0), ..default() },
+        TextColor(Color::srgba(1.0, 0.95, 0.85, 0.85)),
+        TextShadow { offset: Vec2::splat(1.0), color: Color::srgba(0.0, 0.0, 0.0, 0.7) },
+        TextLayout::justify(Justify::Center),
+        Node { position_type: PositionType::Absolute, left: percent(20), right: percent(20), top: percent(64), ..default() },
+        Visibility::Hidden,
+    ));
     commands
         .spawn((
             Card,
@@ -83,6 +97,26 @@ fn fill(mut commands: Commands, current: Res<Current>, font: Res<HudFont>, page:
         }
         p.spawn((TextSpan::new("\n\nI: close"), font.clone(), TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5))));
     });
+}
+
+/// Looking at a planet or moon in the sky names it, with its size from
+/// here and a sentence from the body's row.
+fn gaze(current: Res<Current>, hud: Res<Hud>, eye: Single<&Transform, With<Player>>, line: Single<(&mut Gaze, &mut Text, &mut Visibility)>) {
+    let (mut gaze, mut text, mut visibility) = line.into_inner();
+    let ahead = eye.forward();
+    let seen = current.0.companions.iter().position(|c| {
+        let reach = (c.radius + (0.25 * c.radius).max(1.5)).to_radians();
+        c.elevation > -c.radius && ahead.angle_between(c.direction()) < reach
+    });
+    if seen != gaze.0 || current.is_changed() {
+        gaze.0 = seen;
+        if let Some(c) = seen.map(|k| &current.0.companions[k]) {
+            let across = 2.0 * c.radius;
+            let across = if across < 1.0 { format!("{across:.2}") } else { format!("{across:.1}") };
+            text.0 = format!("{}, {across}° across from here. {}", c.name, c.about);
+        }
+    }
+    visibility.set_if_neq(if gaze.0.is_some() && !hud.hidden { Visibility::Inherited } else { Visibility::Hidden });
 }
 
 /// What follows from the row: size, pull, escape, horizon, sunlight, air.

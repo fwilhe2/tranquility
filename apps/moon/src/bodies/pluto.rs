@@ -155,7 +155,7 @@ pub fn body() -> Body {
         fill_color: Color::linear_rgb(0.9, 0.95, 1.0),
         rocks: Rocks { density: 0.08, largest: 6.0, albedo: [0.3, 0.6], tint: [1.05, 0.95, 0.9], roughness: 0.7, ..default() },
         // Charon: 1.2 thousand kilometres across at 19,600.
-        companions: vec![Companion { turn: [0.3, 1.0, 0.2], ..Companion::new(Map::Charon, 1.77, 60.0, 34.0) }],
+        companions: vec![Companion { turn: [0.3, 1.0, 0.2], about: "19,600 km away and half Pluto's width. The two keep the same faces to each other, so it never moves in this sky.", ..Companion::new(Map::Charon, 1.77, 60.0, 34.0) }],
         look: (-1.2, 0.05),
         ..Body::airless("Pluto", "Sputnik Planitia, eastern shore", Arc::new(Pluto))
     }

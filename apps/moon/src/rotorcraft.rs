@@ -158,7 +158,7 @@ impl Craft {
     fn chase(self) -> (f32, f32) {
         match self {
             Craft::Ingenuity => (1.9, 0.6),
-            Craft::Dragonfly => (12.0, 4.0),
+            Craft::Dragonfly => (9.0, 3.0),
         }
     }
 
