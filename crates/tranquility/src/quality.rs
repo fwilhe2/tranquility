@@ -1,7 +1,7 @@
 //! Quality tiers: what the frame costs on the GPU. `Q` cycles them live.
 //!
 //! - `TRANQUILITY_QUALITY=high|medium|low` picks the starting tier.
-//! - `TRANQUILITY_OFF=ssao,taa,bloom,shadows,far` switches single features off on
+//! - `TRANQUILITY_OFF=ssao,taa,bloom,shadows,softshadow,far` switches single features off on
 //!   top of the tier, for measuring what each costs.
 
 use bevy::{
@@ -18,7 +18,7 @@ use crate::player::Player;
 pub enum Quality {
     /// 4096² shadows in four cascades to 3 km, SSAO, TAA, bloom.
     High,
-    /// 2048² shadows in three cascades to 1.5 km, TAA, bloom.
+    /// 2048² shadows in four cascades to 1.5 km, TAA, bloom.
     Medium,
     /// 1024² shadows in two cascades to 600 m, FXAA.
     Low,
@@ -116,17 +116,23 @@ fn apply(
         } else {
             cam.insert(Fxaa::default());
         }
-        // A shadow lookup of one tap where the frame is tight: the ground
-        // fills half the screen and every pixel of it asks.
-        cam.insert(if q == Quality::High || off("hardshadow") { ShadowFilteringMethod::Gaussian } else { ShadowFilteringMethod::Hardware2x2 });
+        // A shadow lookup of one tap where the frame is tightest (the
+        // ground fills half the screen and every pixel of it asks); a
+        // filtered edge elsewhere, which costs a couple of milliseconds
+        // on a small GPU and takes the stair steps off every shadow.
+        cam.insert(if q == Quality::Low || off("softshadow") { ShadowFilteringMethod::Hardware2x2 } else { ShadowFilteringMethod::Gaussian });
         if q != Quality::Low && !off("bloom") {
             cam.insert(Bloom::NATURAL);
         }
     }
+    // The first cascade ends a few metres out: it holds your own shadow
+    // and what is at your feet, where a texel is seen largest. Out to
+    // 25 m, as it was, a 2048² map gave 3 cm texels there, a staircase
+    // round the shadow of your head; to 6 m it gives 7 mm.
     let (size, cascades, first) = match q {
-        Quality::High => (4096, 4, 30.0),
-        Quality::Medium => (2048, 3, 25.0),
-        Quality::Low => (1024, 2, 30.0),
+        Quality::High => (4096, 4, 8.0),
+        Quality::Medium => (2048, 4, 6.0),
+        Quality::Low => (1024, 2, 12.0),
     };
     let reach = q.shadow_reach();
     shadow_map.size = size;
