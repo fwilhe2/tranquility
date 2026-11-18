@@ -58,7 +58,7 @@ NASA maps, and the bodies' own invented ground.
 Rust 1.97+.
 
 ```sh
-make run APP=potsdam       # native debug build (APP: potsdam, moon, island)
+make run                   # native debug build of moon (APP=potsdam or island for the others)
 make release APP=moon      # native optimised build
 make serve APP=moon        # browser build on http://localhost:8000
 ```

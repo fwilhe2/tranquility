@@ -9,7 +9,7 @@ A first-person world engine on Bevy 0.20 (Rust), meant to carry what [lunar-walk
 ## Running
 
 ```sh
-make run APP=potsdam                 # native debug (dependencies at opt-level 3)
+make run                             # moon, native debug (dependencies at opt-level 3); APP=potsdam|island for the others
 make release APP=moon
 make web APP=moon                    # dist/moon/, needs WebGPU
 make shot APP=… OUT=… POSE=x,y,z,yaw,pitch HOUR=…

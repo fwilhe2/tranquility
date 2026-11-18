@@ -1,4 +1,5 @@
-# One engine, several worlds: pick one with APP (island, moon, potsdam).
+# One engine, several worlds: pick one with APP (moon, the default; potsdam,
+# island).
 #
 # Native:  make run APP=moon        (debug, fast to rebuild)
 #          make release APP=moon    (optimised binary in target/release/)
@@ -12,7 +13,7 @@
 # make video [VIDEO=stroll.mp4] [SECONDS=600] [SIZE=1920x1080] [QUALITY=high]
 #                                 records that, offline, smooth at 60 fps
 
-APP ?= potsdam
+APP ?= moon
 OUT ?= shot.png
 VIDEO ?= stroll.mp4
 SECONDS ?= 600
