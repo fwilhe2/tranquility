@@ -148,9 +148,10 @@ impl Plugin for SoundPlugin {
     }
 }
 
-fn mute(keys: Res<ButtonInput<KeyCode>>, mut muted: ResMut<Muted>, mut sinks: Query<&mut AudioSink>) {
+fn mute(keys: Res<ButtonInput<KeyCode>>, mut muted: ResMut<Muted>, mut hud: ResMut<crate::hud::Hud>, mut sinks: Query<&mut AudioSink>) {
     if keys.just_pressed(KeyCode::KeyM) {
         muted.0 = !muted.0;
+        hud.say(if muted.0 { "sound off" } else if wanted() { "sound on" } else { "no sound in this run" });
     }
     for mut sink in &mut sinks {
         if muted.is_changed() || sink.is_added() {

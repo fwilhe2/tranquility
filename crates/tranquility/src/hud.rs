@@ -17,7 +17,7 @@ impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Hud>()
             .add_systems(Startup, setup)
-            .add_systems(Update, (update, toggle));
+            .add_systems(Update, (update, toggle, (quality_said, notice).chain()));
     }
 }
 
@@ -33,7 +33,22 @@ pub struct Hud {
     pub mode: String,
     /// No text at all: `H`, or an app that wants a clean picture.
     pub hidden: bool,
+    /// A line said in answer to a key, for a few seconds (see `say`).
+    notice: (String, u32),
 }
+
+impl Hud {
+    /// Says something in the middle of the screen for a few seconds: what
+    /// a key has just done, or why it did nothing. Shown even with the
+    /// text hidden, as the answer to a key just pressed.
+    pub fn say(&mut self, text: impl Into<String>) {
+        self.notice = (text.into(), self.notice.1.wrapping_add(1));
+    }
+}
+
+/// The notice's line.
+#[derive(Component)]
+struct Notice;
 
 /// The overlay's own text, as against anything else an app writes.
 #[derive(Component)]
@@ -107,13 +122,43 @@ fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
     ));
     commands.spawn((
         Text::new(""),
-        font,
+        font.clone(),
         TextColor(Color::srgba(1.0, 1.0, 1.0, 0.6)),
         shadow(),
         at(None, Some(10.0)),
         Overlay,
         Help,
     ));
+    commands.spawn((
+        Text::new(""),
+        TextFont { font_size: FontSize::Px(19.0), ..font },
+        TextColor(Color::NONE),
+        shadow(),
+        TextLayout::justify(Justify::Center),
+        Node { position_type: PositionType::Absolute, left: px(0), right: px(0), bottom: percent(24), ..default() },
+        Notice,
+    ));
+}
+
+/// The quality tier, said when `Q` changes it.
+fn quality_said(quality: Res<Quality>, mut hud: ResMut<Hud>) {
+    if quality.is_changed() && !quality.is_added() {
+        hud.say(format!("quality: {}", quality.name()));
+    }
+}
+
+/// Shows the latest notice for three seconds, fading out.
+fn notice(time: Res<Time<Real>>, hud: Res<Hud>, line: Single<(&mut Text, &mut TextColor), With<Notice>>, mut since: Local<(u32, f32)>) {
+    let (mut text, mut colour) = line.into_inner();
+    let t = time.elapsed_secs();
+    if hud.notice.1 != since.0 {
+        *since = (hud.notice.1, t);
+        text.0.clone_from(&hud.notice.0);
+    }
+    let alpha = if hud.notice.1 == 0 { 0.0 } else { ((3.0 - (t - since.1)) / 0.6).clamp(0.0, 1.0) * 0.9 };
+    if colour.0.alpha() != alpha {
+        colour.0 = Color::srgba(1.0, 1.0, 1.0, alpha);
+    }
 }
 
 fn update(

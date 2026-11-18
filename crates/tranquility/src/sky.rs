@@ -240,19 +240,28 @@ fn toggle_air(
     air: Res<WorldAir>,
     atmospheres: Query<Entity, With<Atmosphere>>,
     world: Res<WorldDef>,
+    mut hud: ResMut<crate::hud::Hud>,
 ) {
+    if !keys.just_pressed(KeyCode::KeyB) {
+        return;
+    }
     // Not under a sky light: taking the air from under it hangs the GPU.
-    if !keys.just_pressed(KeyCode::KeyB) || world.sky.sky_light {
+    if world.sky.sky_light {
+        hud.say("the air stays here");
         return;
     }
     if atmospheres.is_empty() {
         if let Some(atmosphere) = &air.0 {
             commands.spawn(atmosphere.clone());
+            hud.say("air on");
+        } else {
+            hud.say("no air here to take away");
         }
     } else {
         for entity in &atmospheres {
             commands.entity(entity).despawn();
         }
+        hud.say("air off: the sky as it would be without it");
     }
 }
 

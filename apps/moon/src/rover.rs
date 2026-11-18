@@ -517,6 +517,17 @@ fn board(
             player.velocity = Vec3::ZERO;
             // The mouse now looks about from the seat.
             (player.yaw, player.pitch) = (0.0, -0.08);
+            hud.say("aboard: W/S drive, A/D steer, Space brakes, V the view, R out");
+        } else if player.flying {
+            hud.say("land first (F), then walk up to the rover");
+        } else {
+            // Out of reach: say where it is, as a clock face round the way
+            // you look.
+            let to = pose.translation - eye.translation;
+            let bearing = (-to.x).atan2(-to.z);
+            let hour = ((player.yaw - bearing) / std::f32::consts::TAU * 12.0).rem_euclid(12.0).round() as u32;
+            let hour = if hour == 0 { 12 } else { hour };
+            hud.say(format!("the rover is {:.0} m away, at {hour} o'clock: walk up to it, then R", Vec2::new(to.x, to.z).length()));
         }
     }
     let show = if driving.aboard && !driving.chase { Visibility::Hidden } else if driving.aboard { Visibility::Inherited } else { Visibility::Hidden };

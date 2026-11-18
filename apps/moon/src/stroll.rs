@@ -395,9 +395,15 @@ fn tour(
     bodies: Res<Catalogue>,
     mut current: ResMut<Current>,
     mut stroll: ResMut<Stroll>,
+    mut hud: ResMut<Hud>,
 ) {
-    if keys.just_pressed(KeyCode::KeyT) && stroll.on {
-        stroll.touring = !stroll.touring;
+    if keys.just_pressed(KeyCode::KeyT) {
+        if stroll.on {
+            stroll.touring = !stroll.touring;
+            hud.say(if stroll.touring { "touring: on to the next body every few minutes" } else { "staying here" });
+        } else {
+            hud.say("T tours the bodies during the stroll: press 0 first");
+        }
     }
     if !stroll.on || !stroll.touring || stroll.arrived.is_none_or(|since| since < stay()) {
         return;
