@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use tranquility::prelude::*;
 
-use crate::{heavens::Companion, plumes::Plume, rocks::Strewn, suit};
+use crate::{heavens::Companion, plumes::Plume, rocks::Strewn, rotorcraft::Craft, suit};
 
 /// A body's ground, and where its loose rocks lie.
 pub trait Land: Ground {
@@ -94,6 +94,8 @@ pub struct Body {
     /// what carries sound from outside to a helmet, and what blows on it.
     pub air_density: f32,
     pub wind: f32,
+    /// Speed of sound in that air, m/s; 0 without air.
+    pub sound_speed: f32,
     /// Where the sun stands: degrees from north through east, and up.
     pub sun: (f32, f32),
     /// Stars' brightness; 0 under a sky that hides them.
@@ -116,6 +118,8 @@ pub struct Body {
     /// Where to look on arrival: yaw and pitch, radians.
     pub look: (f32, f32),
     pub rover: bool,
+    /// The helicopter that flies here, where the air will hold one up.
+    pub craft: Option<Craft>,
 }
 
 /// Sunlight at one astronomical unit, lux.
@@ -142,6 +146,7 @@ impl Body {
             drag: 0.0,
             air_density: 0.0,
             wind: 0.0,
+            sound_speed: 0.0,
             sun: (100.0, 14.0),
             stars: 900.0,
             fill: 1.0,
@@ -155,6 +160,7 @@ impl Body {
             levels: 8,
             look: (0.5, -0.1),
             rover: true,
+            craft: None,
         }
     }
 

@@ -21,7 +21,10 @@ use tranquility::{
     prelude::*,
 };
 
-use crate::body::{Body, Land, Rocks, level_site};
+use crate::{
+    body::{Body, Land, Rocks, level_site},
+    rotorcraft::Craft,
+};
 
 struct Titan;
 
@@ -148,6 +151,9 @@ pub fn body() -> Body {
         // Huygens measured a few tenths of a metre a second at the ground.
         air_density: 5.4,
         wind: 0.4,
+        // Nitrogen at 94 K.
+        sound_speed: 195.0,
+        craft: Some(Craft::Dragonfly),
         sun: (130.0, 28.0),
         stars: 0.0,
         // Nearly all of Titan's light comes from the orange sky, not the

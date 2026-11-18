@@ -51,19 +51,26 @@ pub struct RoverPlugin;
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Parked;
 
+/// Where **R** climbs aboard: anything else that answers the key runs
+/// before, and takes it when it is its own.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Boarding;
+
 impl Plugin for RoverPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(tranquility::vehicle::VehiclePlugin)
+            .add_message::<Thrown>()
             .init_resource::<Driving>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
                 (
-                    (park.run_if(resource_changed::<WorldDef>).in_set(Parked), board, steer).chain().before(Drive),
+                    (park.run_if(resource_changed::<WorldDef>).in_set(Parked), board.in_set(Boarding), steer).chain().before(Drive),
                     (pose_wheels, ride, throw_dust, lay_tracks).chain().after(Drive),
                     (fly_dust, draw_dust).chain().after(Drive),
                     stand_clear.after(Walking),
                     kick.after(crate::gait::Striding).before(fly_dust),
+                    catch.before(fly_dust),
                 ),
             );
     }
@@ -765,6 +772,28 @@ fn kick(
                 throw(&mut dust, fall.at + out * 0.2 + Vec3::Y * 0.02, v);
             }
         }
+    }
+}
+
+/// Soil thrown up by something other than the rover and the boots (a
+/// rotor's downwash): where, how fast, and the ground's height there,
+/// render space.
+#[derive(Message, Clone, Copy)]
+pub struct Thrown {
+    pub at: Vec3,
+    pub velocity: Vec3,
+    pub floor: f32,
+    /// Half the width it is drawn, m.
+    pub size: f32,
+}
+
+fn catch(mut thrown: MessageReader<Thrown>, dust: Single<(&mut Dust, &Transform)>) {
+    let (mut dust, frame) = dust.into_inner();
+    for t in thrown.read() {
+        if dust.grains.len() >= MOST_GRAINS {
+            break;
+        }
+        dust.grains.push(Grain { at: local(frame, t.at), velocity: t.velocity, age: 0.0, size: t.size, floor: t.floor });
     }
 }
 

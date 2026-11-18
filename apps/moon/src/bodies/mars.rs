@@ -23,6 +23,7 @@ use crate::{
     body::{Body, Land, Rocks},
     craters::{Craters, Population},
     heavens::{Companion, Map},
+    rotorcraft::Craft,
 };
 
 struct Mars {
@@ -173,6 +174,9 @@ pub fn body() -> Body {
         // Six millibars of cold carbon dioxide, and an afternoon breeze.
         air_density: 0.020,
         wind: 7.0,
+        // Perseverance's microphones heard it: about 240 m/s.
+        sound_speed: 240.0,
+        craft: Some(Craft::Ingenuity),
         sun: (100.0, 24.0),
         stars: 0.0,
         // The dusty sky lights the shade, butterscotch: matched to how

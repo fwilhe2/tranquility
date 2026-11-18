@@ -19,6 +19,7 @@ mod options;
 mod plumes;
 mod prints;
 mod rocks;
+mod rotorcraft;
 mod rover;
 mod sound;
 mod stroll;
@@ -67,7 +68,7 @@ fn main() {
         .insert_resource(Catalogue(bodies))
         .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin))
         .add_systems(Update, (travel, describe));
-    // MOON_OFF=rocks,heavens,prints,figure,lander,plumes,rover leaves parts out, for measuring what
+    // MOON_OFF=rocks,heavens,prints,figure,lander,plumes,rover,heli leaves parts out, for measuring what
     // each costs.
     let off = options::get("MOON_OFF").unwrap_or_default();
     if !off.contains("rocks") {
@@ -90,6 +91,9 @@ fn main() {
     }
     if !off.contains("rover") {
         app.add_plugins(rover::RoverPlugin);
+    }
+    if !off.contains("heli") {
+        app.add_plugins(rotorcraft::RotorcraftPlugin);
     }
     app.run();
 }
