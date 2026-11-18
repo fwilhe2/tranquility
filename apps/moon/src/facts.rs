@@ -22,9 +22,18 @@ struct Open(bool);
 #[derive(Component)]
 struct Card;
 
-/// The line under the middle of the screen that names what you look at.
+/// The line under the middle of the screen that names what you look at:
+/// a companion in the sky, or one of the site's landmarks.
 #[derive(Component)]
-struct Gaze(Option<usize>);
+struct Gaze(Option<Seen>);
+
+#[derive(Clone, Copy, PartialEq)]
+enum Seen {
+    Sky(usize),
+    /// A landmark, and how far it is (km) and how high above or below
+    /// (km), rounded to what the line shows.
+    Land(usize, i32, i32),
+}
 
 /// The text the card holds, as spans: headings brighter than what follows.
 #[derive(Component)]
@@ -91,29 +100,96 @@ fn fill(mut commands: Commands, current: Res<Current>, font: Res<HudFont>, page:
         for line in numbers(b) {
             p.spawn((TextSpan::new(format!("{line}\n")), font.clone(), TextColor(Color::srgba(0.8, 0.9, 1.0, 0.86))));
         }
+        if let Some(site) = b.place {
+            let at = crate::sites::degrees(site.lat_lon(b.radius, site.start));
+            let line = format!(
+                "\n{} · {at} · {:.0} m {} the reference level · mapped from {} ",
+                site.name.to_uppercase(),
+                site.elevation().abs(),
+                if site.elevation() < 0.0 { "below" } else { "above" },
+                if b.name == "Moon" { "LOLA heights, Clementine albedo (NASA, public domain)" } else { "MOLA heights, Viking colour (NASA, public domain)" },
+            );
+            p.spawn((TextSpan::new(line), font.clone(), TextColor(Color::srgba(0.8, 0.9, 1.0, 0.86))));
+            for (heading, sentence) in site.about {
+                p.spawn((TextSpan::new(format!("\n{heading}  ")), font.clone(), TextColor(HEADING)));
+                p.spawn((TextSpan::new(sentence.to_string()), font.clone(), TextColor(BODY)));
+            }
+            if !site.landmarks.is_empty() {
+                let names: Vec<&str> = site.landmarks.iter().map(|l| l.name).collect();
+                p.spawn((TextSpan::new("\nIn view  ".to_string()), font.clone(), TextColor(HEADING)));
+                p.spawn((TextSpan::new(format!("{}: look toward one to have it named.", names.join(", "))), font.clone(), TextColor(BODY)));
+            }
+            p.spawn((TextSpan::new(format!("\n\n{}\n", b.name.to_uppercase())), font.clone(), TextColor(Color::srgba(0.8, 0.9, 1.0, 0.86))));
+        } else {
+            p.spawn((TextSpan::new("\nThe ground here is invented, from what the missions saw; N goes to a mapped site where there is one.\n".to_string()), font.clone(), TextColor(BODY)));
+        }
         for (heading, sentence) in b.facts {
             p.spawn((TextSpan::new(format!("\n{heading}  ")), font.clone(), TextColor(HEADING)));
             p.spawn((TextSpan::new(sentence.to_string()), font.clone(), TextColor(BODY)));
         }
-        p.spawn((TextSpan::new("\n\nI: close"), font.clone(), TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5))));
+        let sites = crate::sites::on(b.name).count();
+        let more = if sites > 0 { format!("   N: another site ({sites} mapped on {})", b.name) } else { String::new() };
+        p.spawn((TextSpan::new(format!("\n\nI: close{more}")), font.clone(), TextColor(Color::srgba(1.0, 1.0, 1.0, 0.5))));
     });
 }
 
 /// Looking at a planet or moon in the sky names it, with its size from
 /// here and a sentence from the body's row.
-fn gaze(current: Res<Current>, hud: Res<Hud>, picker: Option<Res<crate::picker::Picker>>, eye: Single<&Transform, With<Player>>, line: Single<(&mut Gaze, &mut Text, &mut Visibility)>) {
+#[allow(clippy::too_many_arguments)]
+fn gaze(
+    current: Res<Current>,
+    hud: Res<Hud>,
+    world: Res<WorldDef>,
+    origin: Res<Origin>,
+    picker: Option<Res<crate::picker::Picker>>,
+    eye: Single<&Transform, With<Player>>,
+    line: Single<(&mut Gaze, &mut Text, &mut Visibility)>,
+) {
     let (mut gaze, mut text, mut visibility) = line.into_inner();
     let ahead = eye.forward();
-    let seen = current.0.companions.iter().position(|c| {
+    let sky = current.0.companions.iter().position(|c| {
         let reach = (c.radius + (0.25 * c.radius).max(1.5)).to_radians();
         c.elevation > -c.radius && ahead.angle_between(c.direction()) < reach
     });
+    // A landmark: the nearest to the line of sight, within a couple of
+    // degrees, or a little more for a near one.
+    let here = origin.world(eye.translation);
+    let land = current.0.place.and_then(|site| {
+        site.landmarks
+            .iter()
+            .enumerate()
+            .filter_map(|(k, l)| {
+                let floor = world.ground.height(l.at.0, l.at.1);
+                let to = Vec3::new((l.at.0 - here.x) as f32, floor - eye.translation.y, (l.at.1 - here.y) as f32);
+                let off = ahead.angle_between(to.normalize_or_zero());
+                let reach = (2.5f32).to_radians().max((300.0 / to.length().max(1.0)).atan());
+                (off < reach).then_some((off, k, to))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, k, to)| Seen::Land(k, (Vec2::new(to.x, to.z).length() / 100.0).round() as i32, (to.y / 100.0).round() as i32))
+    });
+    let seen = sky.map(Seen::Sky).or(land);
     if seen != gaze.0 || current.is_changed() {
         gaze.0 = seen;
-        if let Some(c) = seen.map(|k| &current.0.companions[k]) {
-            let across = 2.0 * c.radius;
-            let across = if across < 1.0 { format!("{across:.2}") } else { format!("{across:.1}") };
-            text.0 = format!("{}, {across}° across from here. {}", c.name, c.about);
+        match seen {
+            Some(Seen::Sky(k)) => {
+                let c = &current.0.companions[k];
+                let across = 2.0 * c.radius;
+                let across = if across < 1.0 { format!("{across:.2}") } else { format!("{across:.1}") };
+                text.0 = format!("{}, {across}° across from here. {}", c.name, c.about);
+            }
+            Some(Seen::Land(k, far, up)) => {
+                if let Some(l) = current.0.place.map(|s| &s.landmarks[k]) {
+                    let km = |t: i32| format!("{:.1} km", t as f32 / 10.0);
+                    let height = match up {
+                        0 => "level with you".to_string(),
+                        u if u > 0 => format!("{} above you", km(u)),
+                        u => format!("{} below you", km(-u)),
+                    };
+                    text.0 = format!("{}, {} away, {height}. {}", l.name, km(far), l.about);
+                }
+            }
+            None => {}
         }
     }
     let titled = picker.is_some_and(|p| p.titled());

@@ -151,6 +151,8 @@ enum Act {
     Zoom(usize),
     Go(&'static str),
     Back,
+    /// A mapped site of the body underfoot, by id, or its invented ground.
+    Site(Option<&'static str>),
 }
 
 /// Every element of the strip, by what it stands for.
@@ -166,6 +168,8 @@ enum Key {
     Scale,
     NoMoons,
     Resume,
+    /// The body's sites, along the top of the zoomed strip.
+    Site(u8),
 }
 
 #[derive(Component)]
@@ -210,6 +214,8 @@ struct Hit(Option<Act>);
 #[derive(Resource, Default)]
 struct Drawn {
     subs: HashMap<&'static str, String>,
+    /// The body's sites: name, and whether it is the one underfoot.
+    chips: Vec<(String, bool)>,
     back: Option<String>,
     scale: String,
 }
@@ -223,6 +229,8 @@ enum Anchor {
 }
 
 const LABEL_W: f32 = 180.0;
+/// The most sites a body shows on the strip, its invented ground among them.
+const CHIPS: usize = 7;
 const MINR: f32 = 1.3;
 const ACCENT: u32 = 0xe8b04b;
 
@@ -436,6 +444,19 @@ fn setup(mut commands: Commands, font: Res<HudFont>, mut picker: ResMut<Picker>,
                     Visibility::Hidden,
                 ))
                 .with_child((Text::new(""), face(11.0), TextColor(Color::srgb_u8(0xc3, 0xc8, 0xcf))));
+            for k in 0..CHIPS {
+                strip
+                    .spawn((
+                        Part(Key::Site(k as u8)),
+                        Hit(None),
+                        Place::default(),
+                        Node { padding: UiRect::new(px(8), px(8), px(3), px(3)), border: UiRect::all(px(1)), ..absolute() },
+                        BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.14)),
+                        BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.03)),
+                        Visibility::Hidden,
+                    ))
+                    .with_child((Text::new(""), face(11.0), TextColor(Color::srgb_u8(0x85, 0x8d, 0x97))));
+            }
         });
 }
 
@@ -499,9 +520,15 @@ struct Layout {
     anchors: HashMap<&'static str, Anchor>,
     back: Option<String>,
     scale: String,
+    chips: Vec<(String, bool)>,
+    chip_acts: Vec<Option<Act>>,
 }
 
-fn lay(p: &Picker, walkable: &dyn Fn(&str) -> bool, gravity: &dyn Fn(&str) -> String, w: f32, h: f32) -> Layout {
+/// A site on the strip: its name, its id (`None` for the invented ground),
+/// and whether it is underfoot.
+type Chip = (String, Option<&'static str>, bool);
+
+fn lay(p: &Picker, walkable: &dyn Fn(&str) -> bool, gravity: &dyn Fn(&str) -> String, chips: &[Chip], w: f32, h: f32) -> Layout {
     let hb = strip_height(h);
     let (y, ly) = (hb * 0.42, hb * 0.72);
     let mut out = Layout {
@@ -513,6 +540,8 @@ fn lay(p: &Picker, walkable: &dyn Fn(&str) -> bool, gravity: &dyn Fn(&str) -> St
         anchors: HashMap::new(),
         back: None,
         scale: String::new(),
+        chips: Vec::new(),
+        chip_acts: Vec::new(),
     };
     out.places.insert(Key::Ecliptic, Place { x: 0.0, y, w, h: 1.0, opacity: 1.0 });
     let avail = |s: &[&str]| s.iter().any(|id| walkable(id));
@@ -610,7 +639,19 @@ fn lay(p: &Picker, walkable: &dyn Fn(&str) -> bool, gravity: &dyn Fn(&str) -> St
             out.places.insert(Key::NoMoons, Place { x: edge + 44.0, y: y - 7.0, w: 360.0, h: 0.0, opacity: 1.0 });
         }
         out.places.insert(Key::Back, Place { x: edge + if full { 16.0 } else { 10.0 }, y: 7.0, w: 0.0, h: 0.0, opacity: 1.0 });
-        out.back = Some(format!("‹  S O L A R   S Y S T E M   /   {}", disc(view[0]).name.to_uppercase()));
+        let back = format!("‹  S O L A R   S Y S T E M   /   {}", disc(view[0]).name.to_uppercase());
+        // The sites of the body underfoot, after the way back, when its
+        // system is the one shown.
+        if system_of(p.body) == p.view && !chips.is_empty() {
+            let mut x = edge + if full { 16.0 } else { 10.0 } + back.chars().count() as f32 * 6.4 + 34.0;
+            for (k, (name, id, on)) in chips.iter().take(CHIPS).enumerate() {
+                out.places.insert(Key::Site(k as u8), Place { x, y: 7.0, w: 0.0, h: 0.0, opacity: 1.0 });
+                out.chips.push((name.to_uppercase(), *on));
+                out.chip_acts.push(Some(Act::Site(*id)));
+                x += name.chars().count() as f32 * 7.4 + 26.0;
+            }
+        }
+        out.back = Some(back);
     } else {
         out.places.insert(Key::Crumb, Place { x: 12.0, y: 8.0, w: 360.0, h: 0.0, opacity: 1.0 });
     }
@@ -748,10 +789,10 @@ fn click(
         if *vis == Visibility::Hidden {
             continue;
         }
-        let size = if part.0 == Key::Back { node.size() / scale } else { Vec2::new(place.w, place.h) };
+        let size = if matches!(part.0, Key::Back | Key::Site(_)) { node.size() / scale } else { Vec2::new(place.w, place.h) };
         let inside = local.x >= place.x && local.x < place.x + size.x && local.y >= place.y && local.y < place.y + size.y;
-        // The way back lies over the planet's slot: it wins.
-        if inside && (under.is_none() || part.0 == Key::Back) {
+        // The way back and the sites lie over the planet's slot: they win.
+        if inside && (under.is_none() || matches!(part.0, Key::Back | Key::Site(_))) {
             under = Some((part.0, hit.0));
         }
     }
@@ -786,6 +827,15 @@ fn click(
             p.level = 1;
             p.cursor = SYSTEMS[p.view][0];
         }
+        Some(Act::Site(id)) => {
+            if let Some(body) = bodies.0.iter().find(|b| b.name == current.0.name)
+                && current.0.place.map(|s| s.id) != id
+            {
+                let place = id.and_then(crate::sites::by_id);
+                let body = body.at(place);
+                crate::arrive(&mut commands, &mut current, body);
+            }
+        }
         None => {}
     }
 }
@@ -808,6 +858,7 @@ fn follow(current: Res<Current>, mut p: ResMut<Picker>) {
 fn lay_out(
     time: Res<Time<Real>>,
     p: Res<Picker>,
+    current: Res<Current>,
     bodies: Res<Catalogue>,
     mut drawn: ResMut<Drawn>,
     mut hud: ResMut<Hud>,
@@ -833,7 +884,15 @@ fn lay_out(
             if b.gravity < 0.1 { format!("{:.4} m/s²", b.gravity) } else { format!("{:.2} m/s²", b.gravity) }
         })
     };
-    let layout = lay(&p, &walkable, &gravity, w, h);
+    let chips: Vec<Chip> = {
+        let here = current.0.place.map(|s| s.id);
+        let mut list: Vec<Chip> = crate::sites::on(current.0.name).map(|s| (s.name.to_string(), Some(s.id), here == Some(s.id))).collect();
+        if !list.is_empty() {
+            list.push(("invented".to_string(), None, here.is_none()));
+        }
+        list
+    };
+    let layout = lay(&p, &walkable, &gravity, &chips, w, h);
     node.height = px(layout.height);
     if hud.lift != layout.height {
         hud.lift = layout.height;
@@ -891,8 +950,12 @@ fn lay_out(
                 node.top = px(place.y);
             }
         }
-        if let (Some(mut hit), Key::Hit(id)) = (hit, part.0) {
-            let act = layout.hits.get(id).copied().flatten();
+        if let Some(mut hit) = hit {
+            let act = match part.0 {
+                Key::Hit(id) => layout.hits.get(id).copied().flatten(),
+                Key::Site(k) => layout.chip_acts.get(k as usize).copied().flatten(),
+                _ => hit.0,
+            };
             if hit.0 != act {
                 hit.0 = act;
             }
@@ -900,6 +963,7 @@ fn lay_out(
     }
     drawn.subs = layout.subs;
     drawn.back = layout.back;
+    drawn.chips = layout.chips;
     drawn.scale = layout.scale;
 }
 
@@ -912,15 +976,16 @@ fn paint(
     p: Res<Picker>,
     drawn: Res<Drawn>,
     mut discs: Query<(&Part, &Place, &Look, Option<&mut BackgroundColor>, Option<&mut Outline>, &mut Visibility), (Without<Hit>, Without<Text>)>,
-    mut rings: Query<(&Part, &ChildOf, &mut Node, &mut BorderColor), Without<Place>>,
+    mut rings: Query<(&Part, &ChildOf, &mut Node, &mut BorderColor), (Without<Place>, Without<Hit>)>,
     places: Query<(&Place, &Look)>,
     mut labels: Query<
         (&Part, &Place, Option<&Look>, &mut Text, &mut TextColor, Option<&mut TextShadow>, &mut Visibility, Option<&Anchor>, &mut TextLayout, Option<&Children>),
         Without<Hit>,
     >,
     mut spans: Query<(&mut TextSpan, &mut TextColor), Without<Text>>,
-    mut hits: Query<(&Part, &Place, &Children, &mut Visibility), (With<Hit>, Without<Look>)>,
-    mut hit_texts: Query<&mut Text, (Without<Part>, Without<Heading>, Without<Sub>, Without<Fine>)>,
+    mut hits: Query<(Entity, &Part, &Place, &Children, &mut Visibility), (With<Hit>, Without<Look>)>,
+    mut hit_texts: Query<(&mut Text, &mut TextColor), (Without<Part>, Without<Heading>, Without<Sub>, Without<Fine>)>,
+    mut chip_borders: Query<&mut BorderColor, With<Hit>>,
 ) {
     if !p.shown {
         return;
@@ -1019,18 +1084,43 @@ fn paint(
             }
         }
     }
-    for (part, place, children, mut vis) in &mut hits {
-        let show = place.opacity > 0.5 && (part.0 != Key::Back || drawn.back.is_some());
+    for (entity, part, place, children, mut vis) in &mut hits {
+        let chip = match part.0 {
+            Key::Site(k) => drawn.chips.get(k as usize),
+            _ => None,
+        };
+        let show = place.opacity > 0.5
+            && match part.0 {
+                Key::Back => drawn.back.is_some(),
+                Key::Site(_) => chip.is_some(),
+                _ => true,
+            };
         vis.set_if_neq(if show { Visibility::Inherited } else { Visibility::Hidden });
-        if part.0 == Key::Back
-            && let Some(back) = &drawn.back
-        {
-            for child in children {
-                if let Ok(mut t) = hit_texts.get_mut(*child)
-                    && t.0 != *back
-                {
-                    t.0.clone_from(back);
+        let (words, on) = match (part.0, chip) {
+            (Key::Back, _) => (drawn.back.clone(), false),
+            (Key::Site(_), Some((name, on))) => (Some(name.clone()), *on),
+            _ => (None, false),
+        };
+        let Some(words) = words else { continue };
+        for child in children {
+            if let Ok((mut t, mut c)) = hit_texts.get_mut(*child) {
+                if t.0 != words {
+                    t.0.clone_from(&words);
                 }
+                if matches!(part.0, Key::Site(_)) {
+                    let colour = if on { colour(ACCENT, 1.0) } else { colour(0xc3c8cf, 1.0) };
+                    if c.0 != colour {
+                        c.0 = colour;
+                    }
+                }
+            }
+        }
+        if matches!(part.0, Key::Site(_))
+            && let Ok(mut border) = chip_borders.get_mut(entity)
+        {
+            let edge = if on { colour(ACCENT, 0.8) } else { Color::srgba(1.0, 1.0, 1.0, 0.14) };
+            if border.top != edge {
+                *border = BorderColor::all(edge);
             }
         }
     }
@@ -1056,7 +1146,8 @@ fn title(
     }
     let g = b.gravity / 9.81;
     let g = if g < 0.01 { format!("{g:.4}") } else { format!("{g:.3}") };
-    sub.0 = format!("{} · {g} g · surface unbounded", b.site);
+    let at = b.place.map_or(String::new(), |site| format!(" · {}", crate::sites::degrees(site.lat_lon(b.radius, site.start))));
+    sub.0 = format!("{}{at} · {g} g · surface unbounded", b.site);
     let mut lines = vec![b.note.to_string(), "Walk in any direction for as long as you like: the ground never ends.".to_string()];
     let mut keys = Vec::new();
     if b.rover {
@@ -1067,5 +1158,9 @@ fn title(
     }
     keys.push(format!("F flies. I tells you about {}.", b.name));
     lines.push(keys.join(" "));
+    let sites: Vec<&str> = crate::sites::on(b.name).map(|s| s.name).collect();
+    if !sites.is_empty() {
+        lines.push(format!("Mapped from orbit: {}. N goes from one to the next.", sites.join(", ")));
+    }
     fine.0 = lines.join("\n");
 }

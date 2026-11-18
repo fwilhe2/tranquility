@@ -23,6 +23,7 @@ mod prints;
 mod rocks;
 mod rotorcraft;
 mod rover;
+mod sites;
 mod sound;
 mod stroll;
 mod suit;
@@ -52,12 +53,19 @@ const KEYS: [KeyCode; 9] = [
 
 fn main() {
     let bodies = bodies::all();
-    let wanted = std::env::args().nth(1).or_else(|| options::get("TRANQUILITY_BODY"));
-    let start = wanted
+    // A body or a site by name, as the first argument or in
+    // TRANQUILITY_BODY / TRANQUILITY_SITE: `mars`, `gale`; a site picks
+    // its body. TRANQUILITY_SITE=invented walks the body's own ground.
+    let arg = std::env::args().nth(1);
+    let site_name = options::get("TRANQUILITY_SITE").or_else(|| arg.clone());
+    let site = site_name.as_deref().and_then(sites::by_id);
+    let wanted = site.map(|s| s.body.to_string()).or(arg).or_else(|| options::get("TRANQUILITY_BODY"));
+    let body = wanted
         .and_then(|name| bodies.iter().find(|b| b.name.eq_ignore_ascii_case(&name)))
         .or_else(|| bodies.iter().find(|b| b.name == "Moon"))
-        .unwrap_or(&bodies[0])
-        .clone();
+        .unwrap_or(&bodies[0]);
+    let invented = site_name.is_some_and(|n| n.eq_ignore_ascii_case("invented"));
+    let start = body.at(if invented { None } else { site.or_else(|| first_site(body)) });
     // MOON_SOUND_WAV=out.wav: a minute of the body's sound to a file, and
     // nothing else.
     #[cfg(not(target_arch = "wasm32"))]
@@ -69,7 +77,7 @@ fn main() {
     app.insert_resource(Current(start))
         .insert_resource(Catalogue(bodies))
         .add_plugins((gait::GaitPlugin, stroll::StrollPlugin, sound::SoundPlugin, facts::FactsPlugin, picker::PickerPlugin))
-        .add_systems(Update, (travel, describe));
+        .add_systems(Update, (travel, next_site, describe));
     // MOON_OFF=rocks,heavens,prints,figure,lander,plumes,rover,heli leaves parts out, for measuring what
     // each costs.
     let off = options::get("MOON_OFF").unwrap_or_default();
@@ -109,12 +117,43 @@ fn travel(mut commands: Commands, keys: Res<ButtonInput<KeyCode>>, bodies: Res<C
     }
 }
 
-/// Goes to a body, unless already there.
+/// Goes to a body, at its first real site, unless already there.
 pub fn visit(commands: &mut Commands, current: &mut Current, body: &Body) {
     if body.name != current.0.name {
-        current.0 = body.clone();
-        commands.insert_resource(body.world());
+        arrive(commands, current, body.at(first_site(body)));
     }
+}
+
+/// A body's first real site, if it has any: where it is visited.
+pub fn first_site(body: &Body) -> Option<&'static sites::Site> {
+    sites::on(body.name).next()
+}
+
+/// Puts the walk on a body, at a site or its own ground.
+pub fn arrive(commands: &mut Commands, current: &mut Current, body: Body) {
+    commands.insert_resource(body.world());
+    current.0 = body;
+}
+
+/// **N**: the body's next site, its own invented ground after the last.
+fn next_site(mut commands: Commands, keys: Res<ButtonInput<KeyCode>>, bodies: Res<Catalogue>, mut current: ResMut<Current>, mut hud: ResMut<Hud>) {
+    if !keys.just_pressed(KeyCode::KeyN) {
+        return;
+    }
+    let Some(body) = bodies.0.iter().find(|b| b.name == current.0.name) else { return };
+    let places: Vec<Option<&'static sites::Site>> = sites::on(body.name).map(Some).chain([None]).collect();
+    if places.len() < 2 {
+        hud.say(format!("{} has no mapped sites yet: its ground here is invented", body.name));
+        return;
+    }
+    let here = places.iter().position(|p| p.map(|s| s.id) == current.0.place.map(|s| s.id)).unwrap_or(0);
+    let next = places[(here + 1) % places.len()];
+    let said = match next {
+        Some(site) => format!("{}: {}", site.name, sites::degrees(site.lat_lon(body.radius, site.start))),
+        None => format!("{}: invented ground", body.name),
+    };
+    arrive(&mut commands, &mut current, body.at(next));
+    hud.say(said);
 }
 
 fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>, mut hud: ResMut<Hud>, mut window: Single<&mut Window>) {

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use tranquility::prelude::*;
 
-use crate::{heavens::Companion, plumes::Plume, rocks::Strewn, rotorcraft::Craft, suit};
+use crate::{heavens::Companion, plumes::Plume, rocks::Strewn, rotorcraft::Craft, sites::{Site, SiteLand}, suit};
 
 /// A body's ground, and where its loose rocks lie.
 pub trait Land: Ground {
@@ -123,6 +123,12 @@ pub struct Body {
     pub rover: bool,
     /// The helicopter that flies here, where the air will hold one up.
     pub craft: Option<Craft>,
+    /// How far up the air thins by a factor e, m; 0 where there is none to
+    /// speak of. `air_density` is at the reference level.
+    pub scale_height: f32,
+    /// The real place the walk is at (`sites`), or `None` for the body's
+    /// own invented ground.
+    pub place: Option<&'static Site>,
 }
 
 /// Sunlight at one astronomical unit, lux.
@@ -165,6 +171,8 @@ impl Body {
             look: (0.5, -0.1),
             rover: true,
             craft: None,
+            scale_height: 0.0,
+            place: None,
         }
     }
 
@@ -184,8 +192,38 @@ impl Body {
         SUN_LUX / (self.au * self.au)
     }
 
+    /// This body at a real site, or (`None`) on its own invented ground:
+    /// the site's name, note and first view, its sky, and the air at its
+    /// height.
+    pub fn at(&self, place: Option<&'static Site>) -> Body {
+        let mut body = self.clone();
+        body.place = place;
+        if let Some(site) = place {
+            body.site = site.name;
+            body.note = site.note;
+            body.look = site.look;
+            if site.empty_sky {
+                body.companions.clear();
+            }
+            if self.scale_height > 0.0 {
+                body.air_density = self.air_density * (-site.elevation() / self.scale_height).exp();
+            }
+        }
+        body
+    }
+
+    /// The ground walked on: the site's map over the body's own, or the
+    /// body's own alone.
+    pub fn ground(&self) -> Arc<dyn Land> {
+        match self.place {
+            Some(site) => Arc::new(SiteLand::new(site, self.land.clone())),
+            None => self.land.clone(),
+        }
+    }
+
     pub fn world(&self) -> WorldDef {
-        let (x, z) = self.land.landing_site();
+        let land = self.ground();
+        let (x, z) = land.landing_site();
         let sunlight = self.sunlight();
         // A camera set for sunlit ground of this albedo: the Moon's grey
         // soil at one unit from the sun reads right at EV 12.6.
@@ -193,7 +231,7 @@ impl Body {
         // Lambertian ground of that albedo, seen from its own shadow.
         let ambient = self.fill * sunlight * self.albedo * (3000.0 / (SUN_LUX * 0.11));
         // The walker meets the land with its rocks on it.
-        let ground: Arc<dyn Ground> = Arc::new(Strewn::new(self.land.clone(), self.rocks.clone(), self.sea.as_ref().map(|sea| sea.level)));
+        let ground: Arc<dyn Ground> = Arc::new(Strewn::new(land, self.rocks.clone(), self.sea.as_ref().map(|sea| sea.level)));
         WorldDef {
             name: self.name.into(),
             ground,

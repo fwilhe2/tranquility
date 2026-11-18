@@ -418,8 +418,8 @@ fn tour(
     }
     let here = bodies.0.iter().position(|b| b.name == current.0.name).unwrap_or(0);
     let next = bodies.0[(here + 1) % bodies.0.len()].clone();
-    commands.insert_resource(next.world());
-    current.0 = next;
+    let place = crate::first_site(&next);
+    crate::arrive(&mut commands, &mut current, next.at(place));
 }
 
 /// The black the picture comes out of on arriving somewhere.

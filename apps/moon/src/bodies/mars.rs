@@ -186,6 +186,8 @@ pub fn body() -> Body {
         // Perseverance's microphones heard it: about 240 m/s.
         sound_speed: 240.0,
         craft: Some(Craft::Ingenuity),
+        // Carbon dioxide at about 210 K.
+        scale_height: 11_100.0,
         sun: (100.0, 24.0),
         stars: 0.0,
         // The dusty sky lights the shade, butterscotch: matched to how

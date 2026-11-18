@@ -17,6 +17,7 @@ cargo build -p <app>                 # what the Makefile does
 TRANQUILITY_BODY=mars target/debug/moon          # or a first argument
 TRANQUILITY_BENCH=10 TRANQUILITY_VSYNC=off target/debug/moon   # frame times
 MOON_DRIVE=chase,go TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # at the rover's wheel
+TRANQUILITY_SITE=olympus TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # at a real site (N cycles them)
 MOON_FLY=behind,up TRANQUILITY_BODY=mars TRANQUILITY_SHOT_AFTER=12 TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # flying Ingenuity
 MOON_STROLL=1 TRANQUILITY_SHOT_AFTER=40 TRANQUILITY_SCREENSHOT=out.png target/debug/moon   # 40 s into the stroll
 TRANQUILITY_SIZE=640x360 TRANQUILITY_RECORD=out.mp4 TRANQUILITY_RECORD_SECONDS=6 MOON_STROLL=1 target/debug/moon   # a video, offline, with sound
@@ -39,6 +40,7 @@ A cold build of Bevy takes ~25 min on this machine; later builds are incremental
 - Coordinates as in historical-walk: x east, z south, y up; yaw 0 looks north, forward is (−sin yaw, −cos yaw); rings flat `[x, z, …]`, outer positive by `geom::poly::area`.
 - `Massing` roofs are lower envelopes of planes; walls are broken wherever the envelope bends so wall tops meet roof edges. A new roof shape is a new set of planes in `Massing::planes`, nothing else.
 - Facade parameters ride in the mesh: UV 0 = (distance along the outline, height above street level), vertex colour alpha = `facade::Windows::code()`. Change `facade.wesl` and `Windows` together.
+- `apps/moon/data/sites/` is cut from NASA's global maps by `apps/moon/tools/sites.py` (heights, colour, `sites.txt`); regenerate with it, never hand-edit. A site's ground is `sites::SiteLand`: the map at its spacing, the body's own `height_at` below it. Text about a real place is in `sites.rs`, in our own words. **Public domain only**: data from NASA or USGS products (LOLA, MOLA, Clementine, Viking), never merged products with other agencies' terms (SLDEM2015/Kaguya, HRSC); list any new source in `data/sites/SOURCES.md`.
 - `apps/potsdam/data/potsdam.json` is historical-walk's generated `src/cities/potsdam/city.json`, copied; regenerate it there (`npm run city potsdam`), never hand-edit it.
 - **Never change the camera's sky under `AtmosphereEnvironmentMapLight`.** With that light on the camera, an atmosphere or a skybox coming or going at run time (or the light itself being added) hangs the GPU: Mesa's Intel driver resets the context and the app dies on `DeviceLost`. `SkySettings::sky_light` puts it on at spawn and nothing touches it after; worlds that change (the moon's bodies) go without and light the shade with `ambient`. Test world changes with the touring stroll (`MOON_STROLL=tour MOON_STAY=8 TRANQUILITY_BENCH=60`) and check `journalctl -k` for `GPU HANG`.
 - Bevy 0.20 specifics: shaders are WESL (`import bevy_pbr::render::…`), embedded with `embedded_asset!` and referenced as `embedded://tranquility/<file>`; events are `Message`s (`add_message`, `MessageWriter`/`MessageReader`); `bevy::prelude::World` exists, hence `WorldDef`.

@@ -7,6 +7,8 @@ license.workspace = true
 [dependencies]
 tranquility.workspace = true
 bevy.workspace = true
+# The real sites' maps (`sites.rs`); already in the tree through Bevy.
+png = "0.18"
 
 # The page's address, for options in the browser (`options.rs`).
 [target.'cfg(target_arch = "wasm32")'.dependencies]
