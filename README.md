@@ -10,7 +10,7 @@ Three worlds show the range:
 | App | What it shows | What it exercises |
 |---|---|---|
 | `potsdam` | Potsdam in 1900, from historical-walk's own generated `city.json` | data-driven ground (terrain grid, river, land use), 2,862 buildings with real roof shapes, a facade shader, walls, bridges, trees, lamps, collision, landmark labels |
-| `moon` | nine bodies from Mercury to Pluto, the Moon among them, each unbounded | procedural grounds that never repeat, round worlds with true horizons, real gravity for a suited walker, other atmospheres (Mars, Titan, Pluto), planets in the sky at true size, a drivable rover, a stroll that walks itself and records itself, sound through the suit |
+| `moon` | nine bodies from Mercury to Pluto, the Moon among them, each unbounded | procedural grounds that never repeat, round worlds with true horizons, real gravity for a suited walker, other atmospheres (Mars, Titan, Pluto), planets in the sky at true size, a drivable rover, helicopters where the air will hold one up (Ingenuity on Mars, Dragonfly on Titan), a stroll that walks itself and records itself, sound through the suit |
 | `island` | an endless island landscape | the smallest complete world: noise heights, sea, Earth's atmosphere and a daily sun |
 
 ## Run
@@ -61,9 +61,17 @@ In `moon`: **1**–**9** change body (`make run APP=moon` starts on the Moon;
 `TRANQUILITY_BODY=mars` or a first argument picks another), **R** climbs
 into the rover parked by the landing site and out again (walk up to it
 first: from further than five metres R says where it is), **V** changes
-between its seat and a camera behind. On Phobos and Enceladus, where nobody
+between its seat and a camera behind. On Mars and Titan **R** beside the
+helicopter takes its controls instead (whichever of the two is nearer):
+**Space** spins the rotors up and climbs, **C** descends, **W**/**S** fly
+forward and back (**Shift** faster), **A**/**D** turn, **←**/**→** slip
+sideways, **V** goes from a camera behind it to its own camera to your own
+eyes where you stand, and **R** lets go (it lands itself). **I** opens a
+card about the body underfoot. On Phobos and Enceladus, where nobody
 walks, the movement keys fire suit jets while you are off the ground.
-**0** starts the stroll (below); `MOON_STROLL=1` starts in it.
+**0** starts the stroll (below); `MOON_STROLL=1` starts in it;
+`MOON_FLY=behind|onboard|eyes` (with `up` or `low`) starts at a
+helicopter's controls.
 
 ## The stroll
 
@@ -143,7 +151,9 @@ as you work and slowing back over half a minute; each boot striking the
 ground, carried up through your bones as a dead thud with the grit of the
 soil in it, and the suit's layers working as the leg swings through; the
 jets hissing through the backpack frame; the rover's hub motors through
-the seat.
+the seat. A helicopter comes only through the air: the buzz of its blades
+passing (85 Hz for Ingenuity, as Perseverance recorded it) and the hiss
+off their tips, by distance and side.
 
 Where there is air it carries what it can, from the body's air density
 and wind alone: on Mars six millibars of carbon dioxide bring the grit
@@ -186,6 +196,22 @@ albedo, grip) and a ground. Everything else follows from the row:
 - **The rover** is the LRV at its real size, mass and power on a
   rigid-body suspension. It takes six seconds to reach 13 km/h on the
   Moon, because grip is weight.
+- **Helicopters** fly where the air allows, through the engine's rotor
+  physics and a flight computer like the real ones'. Ingenuity on Mars:
+  1.8 kg under two rotors 1.21 m across at 2537 rpm, tips at Mach 0.67,
+  hovering on some 340 W with 1.9 times its weight in thrust to spare, a
+  few minutes of battery, and dust raised only in a low hover, where the
+  downwash's friction speed passes the threshold for a grain in that air.
+  Dragonfly on Titan: some 875 kg on eight rotors 1.35 m across, tips at
+  Mach 0.25, about 8 kW, sand lifted at a breath. A gusting wind that
+  slows toward the ground pushes them about; a hard landing or a tip-over
+  wrecks them, and they are set right when you let go. No helicopter can
+  fly on the airless bodies, and none is there.
+- **Facts.** **I** opens a card: numbers that follow from the row
+  (escape velocity, the horizon, the sunlight and the sun's size against
+  Earth's, the air and its speed of sound) and a few sentences each on
+  the body's day, heat, air, the features that make it what it is, and
+  who has been there.
 
 | Body | Site | What is there |
 |---|---|---|
@@ -223,6 +249,15 @@ or trees, is the app's own Bevy systems.
   repeat nor lose precision far out.
 - `vehicle`: a rigid body on sprung wheels, driven by forces within each
   tyre's grip.
+- `rotor`: rotorcraft. Each rotor's thrust from blade-element theory at
+  the inflow momentum theory gives (Glauert's, for edgewise flight too),
+  so thrust goes with air density and tip speed squared; climb costs,
+  forward flight pays back, ground effect cushions (Cheeseman–Bennett),
+  a coaxial pair pays its wake (Leishman's 1.28). Induced plus profile
+  power against the motors' limit, blade stall, a battery. A flight
+  computer holds commanded speeds by tilting, with a mixer for swashplates,
+  differential thrust and canted rotors. Tested on Ingenuity's and
+  Dragonfly's numbers.
 - `sky`: Bevy's physically based atmosphere (or none, with a star field), a
   daily sun path by latitude or a fixed sun, cascaded shadows, exposure from
   the sun's height.

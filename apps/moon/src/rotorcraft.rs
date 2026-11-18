@@ -243,6 +243,8 @@ pub struct Piloting {
     since_down: f32,
     /// The app's line, put aside for the instruments while you fly.
     info: Option<String>,
+    /// `MOON_FLY` has had its go.
+    demoed: bool,
 }
 
 #[derive(Resource)]
@@ -515,7 +517,7 @@ fn take(
     // "low" it hovers just off the ground, with "side" the camera behind
     // it looks from the side.
     let demo = std::env::var("MOON_FLY").unwrap_or_default();
-    let start = !demo.is_empty() && !piloting.on && piloting.stand.is_none() && player.controlled && !player.flying;
+    let start = !demo.is_empty() && !piloting.demoed && player.controlled && !player.flying;
     if keys.just_pressed(KeyCode::KeyV) && piloting.on {
         piloting.view = match piloting.view {
             View::Behind => View::Onboard,
@@ -573,6 +575,7 @@ fn take(
         }
         keys.clear_just_pressed(KeyCode::KeyR);
         piloting.on = true;
+        piloting.demoed |= start;
         piloting.behind = None;
         piloting.view = if demo.contains("onboard") {
             View::Onboard
