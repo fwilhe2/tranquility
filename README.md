@@ -52,11 +52,15 @@ Click to capture the mouse, **Esc** to let it go. **WASD** walk, **Shift**
 faster, **Space** jump, **F** fly (**Space**/**C** up and down), **[ ]** sun
 (time of day, or elevation for a fixed sun), **B** air on/off (Mars and Titan), **Q** quality
 tier, **M** sound, **H** hide text, **F11** full screen
-(`TRANQUILITY_SIZE=1920x1080` sets the window's size, for recording).
+(`TRANQUILITY_SIZE=1920x1080` sets the window's size, for recording). A
+key whose effect would not show (sound, quality, air, the rover out of
+reach) says what it did, or why it did nothing, in the middle of the
+screen for a few seconds.
 
 In `moon`: **1**–**9** change body (`make run APP=moon` starts on the Moon;
 `TRANQUILITY_BODY=mars` or a first argument picks another), **R** climbs
-into the rover parked by the landing site and out again, **V** changes
+into the rover parked by the landing site and out again (walk up to it
+first: from further than five metres R says where it is), **V** changes
 between its seat and a camera behind. On Phobos and Enceladus, where nobody
 walks, the movement keys fire suit jets while you are off the ground.
 **0** starts the stroll (below); `MOON_STROLL=1` starts in it.
@@ -125,6 +129,11 @@ went past it as the tour changed into Mars, where the air is computed
 (the driver reset the GPU and the recording stopped; at 640×360 it went
 through). `make video QUALITY=medium` asks less of each frame.
 
+A recording cut short (the window closed, Ctrl-C, the GPU reset) is
+finished with what it has: the frames already drawn come out as the video
+asked for, with their sound. `ffmpeg` runs in a process group of its own,
+so Ctrl-C reaches only the app, which then closes the video properly.
+
 ## Sound
 
 There is no sound from outside on an airless body: nothing carries it.
@@ -163,9 +172,14 @@ albedo, grip) and a ground. Everything else follows from the row:
   (N(>D) ≈ 0.08 D⁻² up to a saturation diameter set by the surface's
   age), Pike's depth and rim ratios, and a spread of wear from crisp to
   nearly gone. Bodies without craters (Io, Sputnik Planitia) have none.
-- **The lander** that brought it stands near the start: a lunar module's
-  descent stage as the crews left it, in crinkled gold and black foil on
-  four splayed legs, each footpad on the ground under it.
+- **The lander** that brought it stands near the start, its ladder toward
+  you: a lunar module whole, as it stood while its crew was out. The
+  descent stage in crinkled gold and black foil on four splayed legs,
+  each footpad on the ground under it and the contact probes bent where
+  the landing folded them; on it the ascent stage, all facets in riveted
+  grey panels, with its triangular windows, the hatch over the porch, the
+  propellant tanks bulging to either side, the docking tunnel, radar and
+  S-band dishes, and a thruster quad at each corner.
 - **The rover** is the LRV at its real size, mass and power on a
   rigid-body suspension. It takes six seconds to reach 13 km/h on the
   Moon, because grip is weight.
@@ -236,12 +250,19 @@ or trees, is the app's own Bevy systems.
 - `sound`: synthesised sound through Bevy's audio. A voice is a function
   from time to a stereo sample, built from noise, filters, glides and
   oscillators; no files, no decoders.
-- `hud`, `tools`: overlay text (apps can add a line); screenshot and pose
-  hooks.
+- `hud`, `tools`: overlay text (apps can add a line, and `Hud::say` a
+  notice); screenshot and pose hooks, and `TRANQUILITY_KEYS="2:KeyQ,4+3:KeyW"`
+  for keys pressed by themselves (seconds after the ground has settled;
+  `+` holds a key that long), to see a key's effect in a screenshot. A
+  screenshot, benchmark or recording takes no input from the keyboard or
+  mouse, so working at the machine meanwhile does not move it.
 
 - `quality`: tiers (**Q**; `TRANQUILITY_QUALITY=high|medium|low`) for shadow-map
-  size and cascades, SSAO, TAA or FXAA, and bloom. `TRANQUILITY_OFF=ssao,taa,bloom,shadows`
-  switches single features off, for measuring.
+  size and cascades, SSAO, TAA or FXAA, and bloom. The first cascade ends
+  6–8 m out, so your own shadow and what lies at your feet get texels of
+  a few millimetres; edges are filtered (Gaussian) on High and Medium.
+  `TRANQUILITY_OFF=ssao,taa,bloom,shadows,softshadow` switches single features off, for
+  measuring.
 
 Rendering is Bevy's: HDR, ACES tone mapping, bloom, TAA and SSAO.
 
