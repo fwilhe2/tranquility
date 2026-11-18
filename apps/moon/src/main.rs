@@ -11,6 +11,7 @@
 mod bodies;
 mod body;
 mod craters;
+mod descent;
 mod facts;
 mod figure;
 mod gait;
@@ -97,7 +98,7 @@ fn main() {
         app.add_plugins(figure::FigurePlugin);
     }
     if !off.contains("lander") && !off.contains("rover") {
-        app.add_plugins(lander::LanderPlugin);
+        app.add_plugins((lander::LanderPlugin, descent::DescentPlugin));
     }
     if !off.contains("rover") {
         app.add_plugins(rover::RoverPlugin);
@@ -186,5 +187,6 @@ fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>,
         (false, Some(c)) => format!("   R: fly {}", c.name()),
         (false, None) => String::new(),
     };
-    hud.keys = format!("0: stroll (T tours the bodies){ride}   I: about {}\n{}", b.name, names.join("  "));
+    let land = if b.air.is_none() && b.rover { "   L: land the lunar module" } else { "" };
+    hud.keys = format!("0: stroll (T tours the bodies){ride}{land}   I: about {}\n{}", b.name, names.join("  "));
 }

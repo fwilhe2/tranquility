@@ -485,8 +485,13 @@ fn board(
     player: Single<(&mut Player, &mut Transform), Without<Rover>>,
     rover: Option<Single<(&mut Vehicle, &Transform), With<Rover>>>,
     mut crew: Query<&mut Visibility, With<Crew>>,
+    descent: Option<Res<crate::descent::Descent>>,
 ) {
     let Some(rover) = rover else { return };
+    // Aboard the lunar module, R is its.
+    if descent.is_some_and(|d| d.on) {
+        return;
+    }
     let (mut vehicle, pose) = rover.into_inner();
     let (mut player, mut eye) = player.into_inner();
     // MOON_DRIVE=seat|chase starts at the wheel, for looking at the rover

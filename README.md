@@ -76,7 +76,14 @@ helicopter takes its controls instead (whichever of the two is nearer):
 **Space** spins the rotors up and climbs, **C** descends, **W**/**S** fly
 forward and back (**Shift** faster), **A**/**D** turn, **←**/**→** slip
 sideways, **V** goes from a camera behind it to its own camera to your own
-eyes where you stand, and **R** lets go (it lands itself). **I** opens a
+eyes where you stand, and **R** lets go (it lands itself). **L** flies
+the lunar module's landing from high gate (**Shift+L** from low gate, the
+last minute; on a body without air): in P64
+the computer steers for the site and **W/S/A/D** redesignate the landing
+point, **P** takes over in P66 (**W/S/A/D** the attitude, **Space/C** the
+rate of descent a foot per second), **Shift+P** lets P65 land it,
+**Enter** is engine stop, **V** goes from the commander's window to a
+chase camera to the ground, and **R** steps out once down. **I** opens a
 card about the body underfoot. On Phobos and Enceladus, where nobody
 walks, the movement keys fire suit jets while you are off the ground.
 **0** starts the stroll (below); `MOON_STROLL=1` starts in it;
@@ -217,6 +224,19 @@ albedo, grip) and a ground. Everything else follows from the row:
   slows toward the ground pushes them about; a hard landing or a tip-over
   wrecks them, and they are set right when you let go. No helicopter can
   fly on the airless bodies, and none is there.
+- **The landing.** The lunar module's powered descent from high gate, 2 km
+  up and 7 km out, coming in from the east with the sun behind: 7.9 t on
+  a 45 kN descent engine throttled between 10 and 60 % (311 s specific
+  impulse, propellant burnt by the rocket equation), turned by 445 N jets.
+  P64 flies the approach by zero-effort-miss guidance and shows the
+  landing point designator angle; P66 is attitude by hand with the rate of
+  descent held by the computer; P65 lands by itself. Contact light from the
+  1.7 m probes, "low level" at 5.6 % of the load and the 60 and 30 second
+  calls, a touchdown the legs take within 3 m/s down, 1.2 m/s across and
+  12° of tilt, dust blown off in flat sheets in the last tens of metres,
+  and the module left standing where it came down. `MOON_DESCENT=window`
+  (or `chase`, `ground`, with `auto` and `lowgate`) starts it for
+  screenshots.
 - **Facts.** **I** opens a card: numbers that follow from the row
   (escape velocity, the horizon, the sunlight and the sun's size against
   Earth's, the air and its speed of sound) and a few sentences each on
@@ -283,6 +303,13 @@ or trees, is the app's own Bevy systems.
   repeat nor lose precision far out.
 - `vehicle`: a rigid body on sprung wheels, driven by forces within each
   tyre's grip.
+- `rocket`: rocket landers. A rigid body on one throttled engine (a band
+  and a full-thrust position, propellant by specific impulse) and attitude
+  jets, gravity lightened by speed across a round body, an attitude
+  autopilot under a hand controller's rates, and programs: guided to a
+  point (zero-effort miss and velocity), hold a rate of descent, descend
+  vertically nulling the speed across, manual. Contact probes, legs with
+  touchdown limits. Tested on the lunar module's numbers.
 - `rotor`: rotorcraft. Each rotor's thrust from blade-element theory at
   the inflow momentum theory gives (Glauert's, for edgewise flight too),
   so thrust goes with air density and tip speed squared; climb costs,

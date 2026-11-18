@@ -302,12 +302,18 @@ impl Lander {
         let share = m / s.feet.len().max(1) as f32;
         let mut lowest = f32::MAX;
         let mut touching = 0;
+        // Feet on the ground or within a few centimetres of it: resting on
+        // two with a third just clear is resting.
+        let mut standing = 0;
         for (k, foot) in s.feet.iter().enumerate() {
             let arm = rot * *foot;
             let p = pos + arm;
             let floor = ground(p);
             let depth = floor - p.y;
             lowest = lowest.min(-depth);
+            if depth > -0.03 {
+                standing += 1;
+            }
             if s.probes.contains(&k) && !self.contact {
                 let tip = p - up * s.probe;
                 if ground(tip) >= tip.y {
@@ -334,7 +340,7 @@ impl Lander {
         self.touching = touching;
         // Down: still on its feet a moment, the engine off.
         let still = self.velocity.length() < 0.1 && self.spin.length() < 0.05;
-        self.quiet = if touching >= 3 && still && self.thrust == 0.0 { self.quiet + h } else { 0.0 };
+        self.quiet = if standing >= 3 && touching > 0 && still && self.thrust == 0.0 { self.quiet + h } else { 0.0 };
         if self.quiet > 0.5 && self.verdict.is_none() {
             self.landed = true;
             let tilt = up.y.clamp(-1.0, 1.0).acos();
@@ -531,5 +537,23 @@ mod tests {
         let orbital = (MOON * 1_737_400.0f32).sqrt();
         assert!(Lander::gravity(MOON, Some(1_737_400.0), Vec3::new(orbital, 0.0, 0.0), 0.0).abs() < 1e-3);
         assert_eq!(Lander::gravity(MOON, None, Vec3::new(orbital, 0.0, 0.0), 0.0), MOON);
+    }
+
+    /// Dropped from contact light onto sloping, uneven ground with the
+    /// engine off, it comes to rest and is judged.
+    #[test]
+    fn settles_on_uneven_ground() {
+        for slope in [0.0f32, 0.05, 0.12] {
+            let mut l = Lander::new(lm(), Program::Off);
+            l.velocity = Vec3::new(0.0, -1.0, 0.0);
+            let mut t = Transform::from_xyz(0.0, 3.0 + 1.8, 0.0);
+            let mut ground = |p: Vec3| p.x * slope + 0.15 * (p.z * 0.7).sin() + 0.1 * (p.x * 1.3).cos();
+            let mut k = 0;
+            while l.verdict.is_none() && k < 240 * 20 {
+                l.substep(&mut t, MOON, Some(1_737_400.0), STEP, &mut ground);
+                k += 1;
+            }
+            assert!(l.verdict.is_some(), "slope {slope}: not settled, v {:?} spin {:?} touching {}", l.velocity, l.spin, l.touching);
+        }
     }
 }

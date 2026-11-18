@@ -23,8 +23,10 @@ use tranquility::{ground::prop, prelude::*};
 
 use crate::{Current, rover::Rover};
 
-/// Footpads' distance from the centre, m; the body's half-width.
-const PAD: f32 = 4.7;
+/// Footpads' distance from the centre, m; the body's half-width; the
+/// contact probes' length under the pads.
+pub const PAD: f32 = 4.7;
+pub const PROBE: f32 = 1.73;
 const BODY: f32 = 2.1;
 /// How near anyone on foot may come to the centre, m.
 pub const KEEP_OFF: f32 = 5.2;
@@ -43,8 +45,9 @@ impl Plugin for LanderPlugin {
 #[derive(Component)]
 pub struct Lander;
 
+/// The meshes and materials a lunar module is built from.
 #[derive(Resource)]
-struct Kit {
+pub struct Kit {
     tube: Handle<Mesh>,
     box_: Handle<Mesh>,
     octagon: Handle<Mesh>,
@@ -260,86 +263,104 @@ fn land(
         }
     }
     let at = best.1;
-    let floor = ground.height(at.x, at.y);
     // Turned so its ladder (−z) faces the start, a little to one side so
     // the light finds the face of the cabin.
     let facing = (at.x - world.spawn.x).atan2(at.y - world.spawn.z) as f32 + 0.35;
-    let turn = Quat::from_rotation_y(facing);
-    commands
-        .spawn((Lander, Transform::from_translation(origin.render(at, floor)).with_rotation(turn), Visibility::default()))
-        .with_children(|lm| {
-            let part = |mesh: &Handle<Mesh>, material: &Handle<PropMaterial>, transform: Transform| (Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), transform);
-            let eighth = Quat::from_rotation_y(std::f32::consts::FRAC_PI_8);
-            // The body: gold blankets, a black band at the top, the deck.
-            let (bottom, top) = (1.15, 2.75);
-            lm.spawn(part(&kit.octagon, &kit.gold, Transform::from_xyz(0.0, (bottom + top) / 2.0, 0.0).with_rotation(eighth).with_scale(Vec3::new(BODY / 0.924, top - bottom, BODY / 0.924))));
-            lm.spawn(part(&kit.octagon, &kit.black, Transform::from_xyz(0.0, top - 0.12, 0.0).with_rotation(eighth).with_scale(Vec3::new(BODY / 0.924 + 0.02, 0.26, BODY / 0.924 + 0.02))));
-            // Black blankets over the underside, round the engine.
-            lm.spawn(part(&kit.octagon, &kit.black, Transform::from_xyz(0.0, bottom + 0.06, 0.0).with_rotation(eighth).with_scale(Vec3::new(BODY / 0.924 + 0.02, 0.12, BODY / 0.924 + 0.02))));
-            lm.spawn(part(&kit.box_, &kit.dark, Transform::from_xyz(0.0, top + 0.03, 0.0).with_scale(Vec3::new(3.2, 0.06, 3.2))));
-            // The equipment bay by the ladder, folded down, and the bay the
-            // rover rode in, its blankets open.
-            lm.spawn(part(&kit.box_, &kit.silver, Transform::from_xyz(-1.15, 1.75, -1.55).with_scale(Vec3::new(0.9, 0.9, 0.06))));
-            lm.spawn(part(&kit.box_, &kit.black, Transform::from_xyz(-1.95, 1.95, 0.9).with_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_4)).with_scale(Vec3::new(1.3, 1.2, 0.05))));
-            // The engine bell.
-            lm.spawn(part(&kit.bell, &kit.dark, Transform::from_xyz(0.0, bottom - 0.35, 0.0).with_scale(Vec3::new(1.0, 0.7, 1.0))));
-            // Four legs: −z is forward, with the ladder.
-            for k in 0..4 {
-                let angle = k as f32 * std::f32::consts::FRAC_PI_2;
-                let out = Quat::from_rotation_y(angle);
-                let (dir, side) = (out * Vec3::NEG_Z, out * Vec3::X);
-                // The footpad, on the ground under it.
-                let pad_at = dir * PAD;
-                let ground_at = |p: Vec3| {
-                    let w = origin.world(origin.render(at, 0.0) + turn * p);
-                    ground.height(w.x, w.y) - floor
-                };
-                let pad_y = ground_at(pad_at);
-                let foot = pad_at + Vec3::Y * (pad_y + 0.16);
-                lm.spawn(part(&kit.pad, &kit.silver, Transform::from_translation(pad_at + Vec3::Y * (pad_y + 0.08)).with_scale(Vec3::new(1.0, 0.16, 1.0))));
-                // The primary strut from high on the body, gold-wrapped,
-                // and its shock absorber's bright inner tube near the foot.
-                let hip = dir * BODY + Vec3::Y * (top - 0.3);
-                lm.spawn(part(&kit.tube, &kit.gold, strut(hip, foot + (hip - foot) * 0.22, 0.11)));
-                lm.spawn(part(&kit.tube, &kit.silver, strut(foot + (hip - foot) * 0.25, foot, 0.075)));
-                // Secondary struts from the body's lower corners to a
-                // knuckle a third of the way up the leg.
-                let knee = foot + (hip - foot) * 0.32;
-                for s in [-1.0, 1.0] {
-                    let corner = dir * (BODY - 0.1) + side * s * 1.05 + Vec3::Y * (bottom + 0.1);
-                    lm.spawn(part(&kit.tube, &kit.silver, strut(corner, knee, 0.045)));
-                }
-                // A deployment truss across under the body.
-                lm.spawn(part(&kit.tube, &kit.silver, strut(dir * (BODY - 0.2) + Vec3::Y * (bottom + 0.05), knee, 0.035)));
-                if k == 0 {
-                    // The ladder: two rails down the forward strut, rungs
-                    // between.
-                    let along = (foot - hip).normalize();
-                    let lift = Vec3::Y * 0.05 - dir * 0.14;
-                    for s in [-0.24, 0.24] {
-                        lm.spawn(part(&kit.tube, &kit.silver, strut(hip + side * s + lift, foot + along * -0.6 + side * s + lift, 0.022)));
-                    }
-                    let length = (foot + along * -0.6 - hip).length();
-                    for r in 1..9 {
-                        let p = hip + along * (r as f32 / 9.0 * length) + lift;
-                        lm.spawn(part(&kit.tube, &kit.silver, strut(p - side * 0.24, p + side * 0.24, 0.016)));
-                    }
-                } else {
-                    // The contact probe, 1.7 m long under the pad, bent
-                    // back on landing and lying across the soil.
-                    let swing = Quat::from_rotation_y(0.6 * (unit(k, 7, 0x1a0d) - 0.5));
-                    let knuckle = pad_at + dir * 0.35 + Vec3::Y * (pad_y + 0.05);
-                    let tip = pad_at + swing * dir * 1.8;
-                    let tip = tip + Vec3::Y * (ground_at(tip) + 0.015);
-                    lm.spawn(part(&kit.tube, &kit.silver, strut(pad_at + Vec3::Y * (pad_y + 0.04), knuckle, 0.014)));
-                    lm.spawn(part(&kit.tube, &kit.silver, strut(knuckle, tip, 0.014)));
-                }
-            }
-            ascent_stage(lm, &kit, top + 0.06);
-        });
+    place(&mut commands, &kit, ground, &origin, at, facing);
 }
 
-/// The ascent stage, standing on the deck at height `b`.
+/// A lunar module standing on the ground at a place, its ladder (−z) turned
+/// to `facing` (yaw), each leg reaching the ground under its own pad.
+pub fn place(commands: &mut Commands, kit: &Kit, ground: &dyn Ground, origin: &Origin, at: DVec2, facing: f32) -> Entity {
+    let floor = ground.height(at.x, at.y);
+    let turn = Quat::from_rotation_y(facing);
+    let ground_at = |p: Vec3| {
+        let w = origin.world(origin.render(at, 0.0) + turn * p);
+        ground.height(w.x, w.y) - floor
+    };
+    commands
+        .spawn((Lander, Transform::from_translation(origin.render(at, floor)).with_rotation(turn), Visibility::default()))
+        .with_children(|lm| model(lm, kit, Some(&ground_at)))
+        .id()
+}
+
+/// The lunar module, in its own frame from the ground under its centre
+/// (or, in flight, the plane under its footpads). With `ground_at`, the
+/// height of the ground at a point of that frame, each leg reaches down to
+/// it and the probes lie bent on it; without, the legs are at full length
+/// and the probes hang straight down.
+pub fn model(lm: &mut bevy::ecs::relationship::RelatedSpawnerCommands<ChildOf>, kit: &Kit, ground_at: Option<&dyn Fn(Vec3) -> f32>) {
+        let part = |mesh: &Handle<Mesh>, material: &Handle<PropMaterial>, transform: Transform| (Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), transform);
+        let eighth = Quat::from_rotation_y(std::f32::consts::FRAC_PI_8);
+        // The body: gold blankets, a black band at the top, the deck.
+        let (bottom, top) = (1.15, 2.75);
+        lm.spawn(part(&kit.octagon, &kit.gold, Transform::from_xyz(0.0, (bottom + top) / 2.0, 0.0).with_rotation(eighth).with_scale(Vec3::new(BODY / 0.924, top - bottom, BODY / 0.924))));
+        lm.spawn(part(&kit.octagon, &kit.black, Transform::from_xyz(0.0, top - 0.12, 0.0).with_rotation(eighth).with_scale(Vec3::new(BODY / 0.924 + 0.02, 0.26, BODY / 0.924 + 0.02))));
+        // Black blankets over the underside, round the engine.
+        lm.spawn(part(&kit.octagon, &kit.black, Transform::from_xyz(0.0, bottom + 0.06, 0.0).with_rotation(eighth).with_scale(Vec3::new(BODY / 0.924 + 0.02, 0.12, BODY / 0.924 + 0.02))));
+        lm.spawn(part(&kit.box_, &kit.dark, Transform::from_xyz(0.0, top + 0.03, 0.0).with_scale(Vec3::new(3.2, 0.06, 3.2))));
+        // The equipment bay by the ladder, folded down, and the bay the
+        // rover rode in, its blankets open.
+        lm.spawn(part(&kit.box_, &kit.silver, Transform::from_xyz(-1.15, 1.75, -1.55).with_scale(Vec3::new(0.9, 0.9, 0.06))));
+        lm.spawn(part(&kit.box_, &kit.black, Transform::from_xyz(-1.95, 1.95, 0.9).with_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_4)).with_scale(Vec3::new(1.3, 1.2, 0.05))));
+        // The engine bell.
+        lm.spawn(part(&kit.bell, &kit.dark, Transform::from_xyz(0.0, bottom - 0.35, 0.0).with_scale(Vec3::new(1.0, 0.7, 1.0))));
+        // Four legs: −z is forward, with the ladder.
+        for k in 0..4 {
+            let angle = k as f32 * std::f32::consts::FRAC_PI_2;
+            let out = Quat::from_rotation_y(angle);
+            let (dir, side) = (out * Vec3::NEG_Z, out * Vec3::X);
+            // The footpad, on the ground under it.
+            let pad_at = dir * PAD;
+            let pad_y = ground_at.map_or(0.0, |g| g(pad_at));
+            let foot = pad_at + Vec3::Y * (pad_y + 0.16);
+            lm.spawn(part(&kit.pad, &kit.silver, Transform::from_translation(pad_at + Vec3::Y * (pad_y + 0.08)).with_scale(Vec3::new(1.0, 0.16, 1.0))));
+            // The primary strut from high on the body, gold-wrapped,
+            // and its shock absorber's bright inner tube near the foot.
+            let hip = dir * BODY + Vec3::Y * (top - 0.3);
+            lm.spawn(part(&kit.tube, &kit.gold, strut(hip, foot + (hip - foot) * 0.22, 0.11)));
+            lm.spawn(part(&kit.tube, &kit.silver, strut(foot + (hip - foot) * 0.25, foot, 0.075)));
+            // Secondary struts from the body's lower corners to a
+            // knuckle a third of the way up the leg.
+            let knee = foot + (hip - foot) * 0.32;
+            for s in [-1.0, 1.0] {
+                let corner = dir * (BODY - 0.1) + side * s * 1.05 + Vec3::Y * (bottom + 0.1);
+                lm.spawn(part(&kit.tube, &kit.silver, strut(corner, knee, 0.045)));
+            }
+            // A deployment truss across under the body.
+            lm.spawn(part(&kit.tube, &kit.silver, strut(dir * (BODY - 0.2) + Vec3::Y * (bottom + 0.05), knee, 0.035)));
+            if k == 0 {
+                // The ladder: two rails down the forward strut, rungs
+                // between.
+                let along = (foot - hip).normalize();
+                let lift = Vec3::Y * 0.05 - dir * 0.14;
+                for s in [-0.24, 0.24] {
+                    lm.spawn(part(&kit.tube, &kit.silver, strut(hip + side * s + lift, foot + along * -0.6 + side * s + lift, 0.022)));
+                }
+                let length = (foot + along * -0.6 - hip).length();
+                for r in 1..9 {
+                    let p = hip + along * (r as f32 / 9.0 * length) + lift;
+                    lm.spawn(part(&kit.tube, &kit.silver, strut(p - side * 0.24, p + side * 0.24, 0.016)));
+                }
+            } else if let Some(ground_at) = ground_at {
+                // The contact probe, 1.7 m long under the pad, bent
+                // back on landing and lying across the soil.
+                let swing = Quat::from_rotation_y(0.6 * (unit(k, 7, 0x1a0d) - 0.5));
+                let knuckle = pad_at + dir * 0.35 + Vec3::Y * (pad_y + 0.05);
+                let tip = pad_at + swing * dir * 1.8;
+                let tip = tip + Vec3::Y * (ground_at(tip) + 0.015);
+                lm.spawn(part(&kit.tube, &kit.silver, strut(pad_at + Vec3::Y * (pad_y + 0.04), knuckle, 0.014)));
+                lm.spawn(part(&kit.tube, &kit.silver, strut(knuckle, tip, 0.014)));
+            } else {
+                // In flight the probe hangs straight down, 1.73 m under the
+                // pad, to touch first and light the contact light.
+                let top = pad_at + dir * 0.35;
+                lm.spawn(part(&kit.tube, &kit.silver, strut(top, top - Vec3::Y * PROBE, 0.014)));
+            }
+        }
+        ascent_stage(lm, kit, top + 0.06);
+}
+
 fn ascent_stage(lm: &mut bevy::ecs::relationship::RelatedSpawnerCommands<ChildOf>, kit: &Kit, b: f32) {
     let part = |mesh: &Handle<Mesh>, material: &Handle<PropMaterial>, transform: Transform| (Mesh3d(mesh.clone()), MeshMaterial3d(material.clone()), transform);
     let level = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
