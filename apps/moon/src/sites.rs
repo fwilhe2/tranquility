@@ -74,7 +74,7 @@ const fn far_side(mut site: Site) -> Site {
     site
 }
 
-pub static SITES: [Site; 10] = [
+pub static SITES: [Site; 11] = [
     site(
         "hadley",
         "Moon",
@@ -166,6 +166,24 @@ pub static SITES: [Site; 10] = [
             &[],
             data!("vonkarman"),
         )),
+    far_side(site(
+        "pasteur",
+        "Moon",
+        "Pasteur",
+        (-41_530.0, -1970.0),
+        (1.57, 0.02),
+        "Just past the Moon's eastern limb, on the floor of Pasteur, a worn basin 224 km across. Apollo 8's crew watched the Earth rise over this ground.",
+        &[
+            ("Earthrise", "On 24 December 1968, on their fourth orbit, Frank Borman, Jim Lovell and Bill Anders came round from the far side over this region and saw the Earth come up over the horizon. Anders' colour photograph of it is one of the best known ever taken. E brings it back."),
+            ("Pasteur", "An old impact basin with a broken, cratered rim, worn down by everything that has hit it since. Its floor is pocked with later craters."),
+            ("Names", "In 2018 the IAU named two craters here for the flight: Anders' Earthrise, 40 km across on Pasteur's western floor, in the photograph's foreground, and 8 Homeward, near its left horizon."),
+            ("Map", "1,600 km of ground at 1 km spacing from LOLA's 237 m heights: wide enough to be seen from orbit, out to the horizon 600 km off."),
+        ],
+        &[
+            Landmark { name: "Anders' Earthrise", at: (-164_040.0, -7130.0), about: "40 km across, on Pasteur's western floor: the crater in the foreground of the Earthrise photograph." },
+        ],
+        data!("pasteur"),
+    )),
     site(
         "jezero",
         "Mars",

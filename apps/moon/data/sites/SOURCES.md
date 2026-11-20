@@ -8,9 +8,14 @@ by hand.
 | What | Product | Made by | Spacing |
 |---|---|---|---|
 | Moon heights | LOLA gridded topography, LDEM_512 (`LRO-L-LOLA-4-GDR-V1.0`) | NASA Goddard Space Flight Center, LRO LOLA team | 59 m |
+| Moon heights, wide (the `pasteur` window, 1,600 km at 1 km) | LOLA gridded topography, LDEM_128 (`LRO-L-LOLA-4-GDR-V1.0`) | NASA Goddard Space Flight Center, LRO LOLA team | 237 m |
 | Moon albedo | Clementine UVVIS 750 nm global mosaic, 118 m, v2 | NASA / USGS Astrogeology (Clementine: BMDO and NASA) | 118 m |
 | Mars heights | MOLA Mission Experiment Gridded Data Record, 128 px/deg (`MGS-M-MOLA-5-MEGDR-L3-V1.0`) | NASA Goddard Space Flight Center, MGS MOLA team | 463 m |
 | Mars colour | Viking MDIM 2.1 colourised global mosaic, 232 m | NASA / USGS Astrogeology | 232 m |
+
+Clementine's mosaic has gaps where no orbit imaged the ground, stored as
+black; `sites.py` fills them from their surroundings, so a smooth patch of
+average albedo in a site's colour is invented, not seen.
 
 The heights come from the PDS Geosciences Node
 (pds-geosciences.wustl.edu), the mosaics from USGS

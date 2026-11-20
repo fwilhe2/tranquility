@@ -5,8 +5,9 @@ For each site in SITES: a square of ground centred on it, N × N samples at
 SPACING metres (x east, z south, the site in the middle), resampled from
 
 - the Moon: LOLA's gridded heights (LDEM_512, the Lunar Orbiter Laser
-  Altimeter alone, 512 pixels per degree, 59 m), and the Clementine 750 nm
-  mosaic for albedo (118 m);
+  Altimeter alone, 512 pixels per degree, 59 m; LDEM_128, 237 m, for a
+  window too wide for that), and the Clementine 750 nm mosaic for albedo
+  (118 m);
 - Mars: MOLA's gridded heights (MEGDR, the Mars Orbiter Laser Altimeter,
   128 pixels per degree, 463 m), and the Viking MDIM 2.1 colour mosaic
   (232 m).
@@ -54,6 +55,10 @@ SITES = [
     ("taurus", "moon", 20.19080, 30.77168, 60.0, 768),
     ("copernicus", "moon", 9.62, 339.92, 150.0, 768),
     ("vonkarman", "moon", -45.4446, 177.5991, 60.0, 768),
+    # Under Apollo 8's fourth orbit: the far side round Pasteur, where the
+    # Earth rose, and the 600 km to its horizon. Wide and coarse, for the
+    # view from orbit (src/earthrise.rs).
+    ("pasteur", "moon", -11.965, 106.0, 1000.0, 1600),
     ("jezero", "mars", 18.4447, 77.4508, 200.0, 768),
     ("gale", "mars", -4.95, 137.60, 200.0, 768),
     ("olympus", "mars", 18.40, 226.20, 200.0, 768),
@@ -210,6 +215,15 @@ def lola(lat, lon):
     return tiles[name]
 
 
+def lola_wide(lat, lon):
+    """LOLA's global LDEM_128 (237 m, floats in km): for windows too wide to
+    read from LDEM_512 row by row."""
+    name = "ldem_128_float.img"
+    if name not in tiles:
+        tiles[name] = Pds(LOLA + name, 90.0, 0.0, 128, 23040, 46080, "<f", 1000.0)
+    return tiles[name]
+
+
 def mola(lat, lon):
     """The MOLA MEGDR tile (90° by 44°, 16-bit metres above the areoid,
     big-endian) a point lies in; tiles are named by their top latitude."""
@@ -296,13 +310,48 @@ def sample(points, source_of, bands):
     return out
 
 
+def fill_gaps(image):
+    """Clementine's mosaic has holes where no orbit saw the ground,
+    stored as black: those pixels (and two round them, which the bicubic
+    filter darkened) take the mean of their filled neighbours, ring by
+    ring from the edge inward."""
+    n, m = len(image), len(image[0])
+    gap = [[all(c < 8 for c in v) for v in row] for row in image]
+    for _ in range(2):
+        grown = [row[:] for row in gap]
+        for j in range(n):
+            for i in range(m):
+                if gap[j][i]:
+                    for dj in (-1, 0, 1):
+                        for di in (-1, 0, 1):
+                            if 0 <= j + dj < n and 0 <= i + di < m:
+                                grown[j + dj][i + di] = True
+        gap = grown
+    todo = [(j, i) for j in range(n) for i in range(m) if gap[j][i]]
+    while todo:
+        done, left = [], []
+        for j, i in todo:
+            near = [image[j + dj][i + di] for dj in (-1, 0, 1) for di in (-1, 0, 1)
+                    if 0 <= j + dj < n and 0 <= i + di < m and not gap[j + dj][i + di]]
+            if near:
+                done.append((j, i, [sum(v[b] for v in near) / len(near) for b in range(len(near[0]))]))
+            else:
+                left.append((j, i))
+        if not done:
+            break
+        for j, i, v in done:
+            image[j][i] = v
+            gap[j][i] = False
+        todo = left
+
+
 def cut(site):
     sid, body, lat, lon, spacing, n = site
     radius = MOON_R if body == "moon" else MARS_R
     print(f"{sid}: {n}² at {spacing:.0f} m", file=sys.stderr)
     pts = grid(lat, lon, spacing, n, radius)
     if body == "moon":
-        heights = sample(pts, lola, 1)
+        heights = sample(pts, lola if spacing < 400.0 else lola_wide, 1)
         colour_src = Tiff(USGS + "Lunar_Clementine_UVVIS_750nm_Global_Mosaic_118m_v2.tif", MOON_R)
     else:
         heights = sample(pts, mola, 1)
@@ -318,6 +367,7 @@ def cut(site):
     half = grid(lat, lon, spacing * 2.0, n // 2, radius)
     colour = sample(half, lambda la, lo: colour_src, colour_src.bands)
     mode = "L" if colour_src.bands == 1 else "RGB"
+    fill_gaps(colour)
     pixels = bytearray()
     for row in colour:
         for v in row:
@@ -325,7 +375,7 @@ def cut(site):
     Image.frombytes(mode, (n // 2, n // 2), bytes(pixels)).save(os.path.join(OUT, f"{sid}.colour.png"), optimize=True)
     centre = heights[n // 2][n // 2][0]
     print(f"{sid}: {floor:.0f} to {top:.0f} m, the site at {centre:.0f} m", file=sys.stderr)
-    resolution = 59.2 if body == "moon" else 463.0
+    resolution = (59.2 if spacing < 400.0 else 237.0) if body == "moon" else 463.0
     return f"{sid} {floor:.3f} {quantum:.6f} {spacing:.1f} {n} {lat} {lon} {resolution}"
 
 
