@@ -3,7 +3,8 @@
 //! horizon and Bill Anders photographed it.
 //!
 //! **E** starts it (or `MOON_EARTHRISE=1`, or `MOON_EARTHRISE=75:48:30` to
-//! start at that ground elapsed time); **E** again ends it. **V** changes
+//! start at that ground elapsed time, `…,lens,printed` through the lens and
+//! turned as printed: see `asked`); **E** again ends it. **V** changes
 //! the view: out of window 5 as Anders saw it, out of the hatch window as
 //! Lovell did, through the Hasselblad's
 //! 250 mm lens, or looking round freely. **O** turns the picture the way
@@ -253,14 +254,28 @@ fn scene(moon: &crate::body::Body) -> Option<crate::body::Body> {
     Some(body)
 }
 
-/// `MOON_EARTHRISE=75:48:30` (or `=1`): the time to start at.
-fn asked() -> Option<f64> {
+/// `MOON_EARTHRISE=75:48:30` (or `=1`): the time to start at; and after
+/// a comma what to look through (`hatch`, `lens`, `free`) and `printed`,
+/// for pictures: `MOON_EARTHRISE=75:48:39,lens,printed`.
+fn asked() -> Option<(f64, View, bool)> {
     let v = options::get("MOON_EARTHRISE")?;
-    let parts: Vec<f64> = v.split(':').filter_map(|p| p.trim().parse().ok()).collect();
-    Some(match parts[..] {
+    let mut words = v.split(',');
+    let parts: Vec<f64> = words.next().unwrap_or("").split(':').filter_map(|p| p.trim().parse().ok()).collect();
+    let clock = match parts[..] {
         [h, m, s] => h * 3600.0 + m * 60.0 + s,
         _ => FROM,
-    })
+    };
+    let (mut view, mut printed) = (View::Window, false);
+    for w in words {
+        match w.trim() {
+            "hatch" => view = View::Hatch,
+            "lens" => view = View::Lens,
+            "free" => view = View::Free,
+            "printed" => printed = true,
+            _ => {}
+        }
+    }
+    Some((clock, view, printed))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -303,9 +318,12 @@ fn toggle(
     }
     let Some(body) = scene(moon) else { return };
     crate::arrive(&mut commands, &mut current, body);
+    let (clock, view, published) = from.unwrap_or((FROM, View::Window, false));
     *e = Earthrise {
         on: true,
-        clock: from.unwrap_or(FROM),
+        clock,
+        view,
+        published,
         pace: 1.0,
         put_aside: Some((hud.info.clone(), hud.keys.clone())),
         free: Vec2::new(0.0, -0.3),
