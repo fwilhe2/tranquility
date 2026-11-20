@@ -63,6 +63,28 @@ impl Sun {
     }
 }
 
+/// How the sky has turned for someone at `at` (world x, z), against how
+/// it stands at the world's zero, where [`Sun`] and anything else hung in
+/// the sky are given. On a flat world, not at all. On a round one the
+/// ground is a map of the sphere round the zero, distances true along
+/// straight lines from it, and a step across it is a step round the
+/// sphere: the sky (fixed in space, too far to show parallax) turns the
+/// other way by the arc travelled. A walk of a kilometre on the Moon turns
+/// it by two minutes of arc; an orbit's worth of travel turns it all the
+/// way round. A direction `d` given at the zero is `turn * d` here.
+pub fn turn(radius: Option<f32>, at: bevy::math::DVec2) -> Quat {
+    let Some(r) = radius.filter(|r| *r > 0.0) else { return Quat::IDENTITY };
+    let d = at.length();
+    if d < 1e-3 {
+        return Quat::IDENTITY;
+    }
+    // Here, up is the zero's up turned by d / r toward `at`, about the
+    // level axis square to it; the sky turns back by the same.
+    let along = at / d;
+    let axis = Vec3::new(along.y as f32, 0.0, -along.x as f32);
+    Quat::from_axis_angle(axis, -(d / r as f64) as f32)
+}
+
 /// The world's air, kept so `B` can take it away and give it back.
 #[derive(Resource, Default)]
 struct WorldAir(Option<Atmosphere>);
@@ -212,11 +234,26 @@ fn control_sun(
 fn place_sun(
     sun: Res<Sun>,
     world: Res<WorldDef>,
+    origin: Res<crate::origin::Origin>,
     atmospheres: Query<(), With<Atmosphere>>,
-    mut light: Single<&mut Transform, With<DirectionalLight>>,
+    mut light: Single<&mut Transform, (With<DirectionalLight>, Without<Camera3d>)>,
     mut exposure: Query<&mut Exposure>,
+    mut cameras: Query<(&Transform, Option<&mut Skybox>), With<Camera3d>>,
 ) {
-    **light = Transform::from_translation(sun.direction()).looking_at(Vec3::ZERO, Vec3::Y);
+    // The sun and the stars as they stand over the camera.
+    let mut turned = Quat::IDENTITY;
+    for (camera, skybox) in &mut cameras {
+        turned = turn(world.terrain.radius, origin.world(camera.translation));
+        // A star at `d` in the cube map shows at `rotation * d`.
+        if let Some(mut skybox) = skybox
+            && skybox.rotation != turned
+        {
+            skybox.rotation = turned;
+        }
+    }
+    let to_sun = turned * sun.direction();
+    let up = if to_sun.y.abs() > 0.999 { Vec3::Z } else { Vec3::Y };
+    **light = Transform::from_translation(to_sun).looking_at(Vec3::ZERO, up);
 
     // A camera operator's rule of thumb instead of metering: full daylight
     // exposure while the sun is well up; under air, opening up about six

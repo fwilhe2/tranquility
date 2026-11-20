@@ -2,7 +2,9 @@
 //! Earth from the Moon, Jupiter from its moons, Mars filling a quarter of
 //! the sky from Phobos. All are lit by the same Sun as the ground, so each
 //! shows the phase the geometry gives. They ride along with the camera, far
-//! beyond the terrain: they are directions, not places.
+//! beyond the terrain: they are directions, not places, given as they stand
+//! over the world's zero and turned as the sky turns for a traveller round
+//! the body (`tranquility::sky::turn`).
 //!
 //! Angular sizes are the true ones, from the bodies' radii and distances.
 
@@ -17,11 +19,14 @@ use bevy::{
 use tranquility::{
     noise::{fbm3, smoothstep},
     prelude::*,
+    sky,
+    terrain::Chunks,
 };
 
 use crate::Current;
 
-/// Inside the camera's far plane, outside everything else.
+/// Inside the camera's far plane, outside everything else: at least this,
+/// and further when the ground reaches further (seen from orbit).
 const DISTANCE: f32 = 37_000.0;
 /// A disc smaller than this (degrees) would flicker between pixels: it is
 /// drawn this size and dimmed to the same total light.
@@ -87,12 +92,18 @@ impl Plugin for HeavensPlugin {
     }
 }
 
+/// The Sun's disc, and its drawn angular radius, degrees.
 #[derive(Component)]
-struct SunDisc;
+struct SunDisc(f32);
 
-/// A companion, and the direction it hangs in.
+/// A companion: the direction it hangs in over the world's zero, its drawn
+/// angular radius (degrees), and how it is turned there.
 #[derive(Component)]
-struct Hanging(Vec3);
+struct Hanging {
+    direction: Vec3,
+    radius: f32,
+    rotation: Quat,
+}
 
 /// Planet maps are painted once, all of them on the compute pool from the
 /// start: Jupiter's takes seconds, and the first visit must not wait.
@@ -149,7 +160,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
         )),
     };
     commands.spawn((
-        SunDisc,
+        SunDisc(1.0),
         Mesh3d(globe.coarse.clone()),
         MeshMaterial3d(globe.sun.clone()),
         NotShadowCaster,
@@ -158,8 +169,8 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     commands.insert_resource(globe);
 }
 
-fn size(degrees: f32) -> Vec3 {
-    Vec3::splat(DISTANCE * degrees.to_radians().tan())
+fn size(degrees: f32, distance: f32) -> Vec3 {
+    Vec3::splat(distance * degrees.to_radians().tan())
 }
 
 /// Hangs the current body's sky: when the app starts and on every change
@@ -173,7 +184,7 @@ fn populate(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     old: Query<Entity, With<Hanging>>,
-    mut disc: Single<(&mut Transform, &mut Visibility), With<SunDisc>>,
+    mut disc: Single<(&mut SunDisc, &mut Visibility)>,
 ) {
     for entity in &old {
         commands.entity(entity).despawn();
@@ -189,7 +200,7 @@ fn populate(
     if let Some(mut material) = materials.get_mut(&globe.sun) {
         material.emissive = LinearRgba::rgb(4.0e6, 3.8e6, 3.5e6) * dim;
     }
-    disc.0.scale = size(drawn);
+    disc.0.0 = drawn;
     *disc.1 = if body.sun_disc && !body.sky_draws_sun() { Visibility::Inherited } else { Visibility::Hidden };
 
     for c in &body.companions {
@@ -231,10 +242,10 @@ fn populate(
             }
         };
         let mut globe_entity = commands.spawn((
-            Hanging(c.direction()),
+            Hanging { direction: c.direction(), radius: drawn, rotation },
             Mesh3d(if c.radius > 0.4 { globe.fine.clone() } else { globe.coarse.clone() }),
             MeshMaterial3d(materials.add(material)),
-            Transform::from_scale(size(drawn)).with_rotation(rotation),
+            Transform::from_scale(size(drawn, DISTANCE)).with_rotation(rotation),
             NotShadowCaster,
             NotShadowReceiver,
         ));
@@ -264,13 +275,22 @@ fn populate(
 
 fn follow(
     sun: Res<Sun>,
+    world: Res<WorldDef>,
+    origin: Res<Origin>,
+    chunks: Res<Chunks>,
     camera: Single<&Transform, (With<Camera3d>, Without<SunDisc>, Without<Hanging>)>,
-    mut disc: Single<&mut Transform, (With<SunDisc>, Without<Hanging>)>,
+    disc: Single<(&mut Transform, &SunDisc), Without<Hanging>>,
     mut hanging: Query<(&mut Transform, &Hanging), Without<SunDisc>>,
 ) {
-    disc.translation = camera.translation + sun.direction() * DISTANCE;
-    for (mut transform, direction) in &mut hanging {
-        transform.translation = camera.translation + direction.0 * DISTANCE;
+    let distance = (1.25 * world.terrain.reach_to(chunks.span().1)).max(DISTANCE);
+    let turned = sky::turn(world.terrain.radius, origin.world(camera.translation));
+    let (mut transform, disc) = disc.into_inner();
+    transform.translation = camera.translation + turned * sun.direction() * distance;
+    transform.scale = size(disc.0, distance);
+    for (mut transform, hanging) in &mut hanging {
+        transform.translation = camera.translation + turned * hanging.direction * distance;
+        transform.rotation = turned * hanging.rotation;
+        transform.scale = size(hanging.radius, distance);
     }
 }
 
