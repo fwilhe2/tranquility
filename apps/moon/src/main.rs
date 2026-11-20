@@ -12,6 +12,7 @@ mod bodies;
 mod body;
 mod craters;
 mod descent;
+mod earthrise;
 mod facts;
 mod figure;
 mod gait;
@@ -99,6 +100,9 @@ fn main() {
     }
     if !off.contains("lander") && !off.contains("rover") {
         app.add_plugins((lander::LanderPlugin, descent::DescentPlugin));
+    }
+    if !off.contains("earthrise") {
+        app.add_plugins(earthrise::EarthrisePlugin);
     }
     if !off.contains("rover") {
         app.add_plugins(rover::RoverPlugin);
@@ -188,5 +192,5 @@ fn describe(current: Res<Current>, bodies: Res<Catalogue>, world: Res<WorldDef>,
         (false, None) => String::new(),
     };
     let land = if b.air.is_none() && b.rover { "   L: land the lunar module" } else { "" };
-    hud.keys = format!("0: stroll (T tours the bodies){ride}{land}   I: about {}\n{}", b.name, names.join("  "));
+    hud.keys = format!("0: stroll (T tours the bodies){ride}{land}   E: Earthrise, Apollo 8   I: about {}\n{}", b.name, names.join("  "));
 }
