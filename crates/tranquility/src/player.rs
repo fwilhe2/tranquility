@@ -137,7 +137,7 @@ fn spawn(mut commands: Commands, world: Res<WorldDef>, origin: Res<Origin>) {
         Projection::Perspective(PerspectiveProjection {
             fov: 70f32.to_radians(),
             near: 0.1,
-            far: (world.terrain.reach() * 1.6).max(40_000.0),
+            far: crate::terrain::far(&world.terrain, world.terrain.levels.max(1) - 1),
             ..default()
         }),
         transform,
@@ -164,7 +164,7 @@ fn respawn(
     let (mut player, mut transform, mut projection) = player.into_inner();
     (*player, *transform) = start(&world, &origin);
     if let Projection::Perspective(p) = &mut *projection {
-        p.far = (world.terrain.reach() * 1.6).max(40_000.0);
+        p.far = crate::terrain::far(&world.terrain, world.terrain.levels.max(1) - 1);
     }
 }
 

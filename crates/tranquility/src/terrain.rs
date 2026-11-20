@@ -101,9 +101,12 @@ impl Key {
 pub struct Chunks {
     loaded: HashMap<Key, Entity>,
     jobs: HashMap<Key, Task<Built>>,
-    /// The plan, and the level 0 chunk the camera was in when it was made.
+    /// The plan, and what it was made for: the levels streamed, and the
+    /// chunk of the finest the camera was in.
     wanted: HashSet<Key>,
-    planned_for: Option<IVec2>,
+    planned_for: Option<((u32, u32), IVec2)>,
+    /// The levels streamed now, finest and coarsest.
+    span: (u32, u32),
 }
 
 impl Chunks {
@@ -111,13 +114,19 @@ impl Chunks {
     pub fn is_settled(&self) -> bool {
         self.jobs.is_empty() && !self.loaded.is_empty() && self.wanted.iter().all(|k| self.loaded.contains_key(k))
     }
+
+    /// The levels streamed now, finest and coarsest
+    /// ([`TerrainSettings::span`]).
+    pub fn span(&self) -> (u32, u32) {
+        self.span
+    }
 }
 
-/// Which chunks should exist with the camera at `camera`: every level's
-/// block, less the part the next finer level covers.
-pub fn plan(settings: &TerrainSettings, camera: DVec2) -> HashSet<Key> {
+/// Which chunks should exist with the camera at `camera`, streaming the
+/// levels `finest..=coarsest`: every level's block, less the part the
+/// next finer level covers.
+pub fn plan(settings: &TerrainSettings, camera: DVec2, (finest, coarsest): (u32, u32)) -> HashSet<Key> {
     let mut wanted = HashSet::new();
-    let levels = settings.levels.max(1);
     let q = settings.ring.max(1);
     let cell = |level: u32| {
         let c = (camera / settings.size(level)).floor();
@@ -125,10 +134,10 @@ pub fn plan(settings: &TerrainSettings, camera: DVec2) -> HashSet<Key> {
     };
     // The coarsest level's block is centred on the camera's own chunk; each
     // finer one is a block of its parent's chunks, cut in four.
-    let top = cell(levels - 1);
+    let top = cell(coarsest);
     let (mut lo, mut hi) = (top - IVec2::splat(2 * q + 1), top + IVec2::splat(2 * q + 1));
-    for level in (0..levels).rev() {
-        let (hole_lo, hole_hi) = if level > 0 {
+    for level in (finest..=coarsest).rev() {
+        let (hole_lo, hole_hi) = if level > finest {
             (cell(level) - IVec2::splat(q), cell(level) + IVec2::splat(q))
         } else {
             (IVec2::MAX, IVec2::MIN)
@@ -141,7 +150,7 @@ pub fn plan(settings: &TerrainSettings, camera: DVec2) -> HashSet<Key> {
                 }
             }
         }
-        if level > 0 {
+        if level > finest {
             (lo, hi) = (hole_lo * 2, hole_hi * 2 + IVec2::ONE);
         }
     }
@@ -171,6 +180,7 @@ fn reset(
     chunks.jobs.clear();
     chunks.wanted.clear();
     chunks.planned_for = None;
+    chunks.span = (0, world.terrain.levels.max(1) - 1);
     if let Some(mut m) = materials.get_mut(&material.0) {
         *m = ground::material(&world.terrain);
     }
@@ -182,17 +192,26 @@ fn stream_chunks(
     mut meshes: ResMut<Assets<Mesh>>,
     world: Res<WorldDef>,
     origin: Res<Origin>,
-    camera: Single<&Transform, With<Camera3d>>,
+    camera: Single<(&Transform, &mut Projection), With<Camera3d>>,
     mesh_handles: Query<&Mesh3d, With<Chunk>>,
 ) {
     let settings = &world.terrain;
+    let (camera, mut projection) = camera.into_inner();
     let at = origin.world(camera.translation);
-    let here = (at / settings.size(0)).floor();
+    let height = camera.translation.y - world.ground.height(at.x, at.y);
+    let span = settings.span(height);
+    let here = (at / settings.size(span.0)).floor();
     let here = IVec2::new(here.x as i32, here.y as i32);
     let chunks = &mut *chunks;
-    if chunks.planned_for != Some(here) {
-        chunks.wanted = plan(settings, at);
-        chunks.planned_for = Some(here);
+    if chunks.planned_for != Some((span, here)) {
+        chunks.wanted = plan(settings, at, span);
+        chunks.planned_for = Some((span, here));
+        if chunks.span.1 != span.1
+            && let Projection::Perspective(p) = &mut *projection
+        {
+            p.far = far(settings, span.1);
+        }
+        chunks.span = span;
         // Jobs for chunks no longer wanted are dropped, which cancels them.
         chunks.jobs.retain(|key, _| chunks.wanted.contains(key));
     }
@@ -306,6 +325,11 @@ fn cast(mut commands: Commands, world: Res<WorldDef>, quality: Res<Quality>, chu
             commands.entity(entity).insert(NotShadowCaster);
         }
     }
+}
+
+/// The camera's far plane with ground out to `coarsest`.
+pub(crate) fn far(settings: &TerrainSettings, coarsest: u32) -> f32 {
+    (settings.reach_to(coarsest) * 1.6).max(40_000.0)
 }
 
 struct Built {
@@ -436,13 +460,29 @@ pub fn ground<G: Ground>(g: G) -> Arc<dyn Ground> {
 mod tests {
     use super::*;
 
+    /// From high up the finest levels go and coarser ones come; on the
+    /// ground nothing changes, and a plan of any span still tiles.
+    #[test]
+    fn span_follows_the_eye() {
+        let moon = TerrainSettings { levels: 8, chunk_size: 64.0, radius: Some(1_737_400.0), ..Default::default() };
+        assert_eq!(moon.span(1.7), (0, 7));
+        let (finest, coarsest) = moon.span(112_000.0);
+        assert!(finest >= 6, "{finest}");
+        let horizon = (2.0f32 * 1_737_400.0 * 112_000.0).sqrt();
+        assert!(moon.reach_to(coarsest) > horizon, "{coarsest}");
+        let flat = TerrainSettings { levels: 6, ..Default::default() };
+        assert_eq!(flat.span(5000.0).1, 5);
+        let wanted = plan(&moon, DVec2::new(1.0e5, -3.0e4), (finest, coarsest));
+        assert!(wanted.iter().all(|k| (finest..=coarsest).contains(&k.level)));
+    }
+
     /// At any camera position the plan tiles its whole square exactly once.
     #[test]
     fn plan_covers_without_holes_or_overlap() {
         for (levels, ring) in [(1, 1), (4, 1), (6, 1), (5, 2)] {
             let settings = TerrainSettings { levels, ring, chunk_size: 64.0, ..Default::default() };
             for camera in [DVec2::ZERO, DVec2::new(-0.5, 63.9), DVec2::new(12345.6, -98765.4), DVec2::new(-3.0e7, 5.0e6)] {
-                let wanted = plan(&settings, camera);
+                let wanted = plan(&settings, camera, (0, levels - 1));
                 // Count level 0 cells covered.
                 let mut covered: HashMap<I64Vec2, u32> = HashMap::default();
                 for key in &wanted {

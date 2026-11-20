@@ -131,9 +131,45 @@ impl TerrainSettings {
         (self.size(level) / self.resolution as f64) as f32
     }
 
-    /// The streamed ground reaches at least this far from the camera, m.
+    /// The streamed ground reaches at least this far from the camera, m,
+    /// standing on it.
     pub fn reach(&self) -> f32 {
-        (self.size(self.levels.max(1) - 1) * (2 * self.ring + 1) as f64) as f32
+        self.reach_to(self.levels.max(1) - 1)
+    }
+
+    /// How far the ground reaches with `coarsest` the coarsest level, m.
+    pub fn reach_to(&self, coarsest: u32) -> f32 {
+        (self.size(coarsest) * (2 * self.ring.max(1) + 1) as f64) as f32
+    }
+
+    /// The levels to stream, finest and coarsest, for an eye `height`
+    /// metres above the ground. From high up the finest are wasted: they
+    /// would lie under the eye, smaller than a pixel. And on a round world
+    /// the horizon goes out as the eye rises (from 100 km up over the Moon
+    /// it is 600 km off), so coarser levels are added to reach it. Standing
+    /// on the ground it is `0..levels`.
+    pub fn span(&self, height: f32) -> (u32, u32) {
+        let top = self.levels.max(1) - 1;
+        let block = (2 * self.ring.max(1) + 1) as f32 * self.chunk_size;
+        // The finest level's block is four times as wide as the eye is
+        // high: its grid step then is about what a pixel covers straight
+        // down.
+        let finest = if height > 8.0 * block { (height / (4.0 * block)).log2().floor() as u32 } else { 0 };
+        let coarsest = match self.radius {
+            Some(r) => {
+                let (h, r) = (height.max(0.0) as f64, r as f64);
+                // The horizon, and some way past it for what stands up
+                // behind it.
+                let need = 1.3 * (2.0 * r * h + h * h).sqrt();
+                let level = (need / block as f64).log2().ceil().max(0.0) as u32;
+                // Never past the far side: the curve is a sphere's to its
+                // radius only.
+                let most = (r / block as f64).log2().floor().max(0.0) as u32;
+                level.min(most).max(top)
+            }
+            None => top,
+        };
+        (finest.min(coarsest), coarsest)
     }
 }
 
