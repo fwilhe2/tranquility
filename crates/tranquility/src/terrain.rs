@@ -101,10 +101,10 @@ impl Key {
 pub struct Chunks {
     loaded: HashMap<Key, Entity>,
     jobs: HashMap<Key, Task<Built>>,
-    /// The plan, and what it was made for: the levels streamed, and the
-    /// chunk of the finest the camera was in.
+    /// The plan, and what it was made for: the levels streamed, the chunk
+    /// of the finest the camera was in, and the view (see `View`).
     wanted: HashSet<Key>,
-    planned_for: Option<((u32, u32), IVec2)>,
+    planned_for: Option<((u32, u32), IVec2, Option<IVec4>)>,
     /// The levels streamed now, finest and coarsest.
     span: (u32, u32),
 }
@@ -157,6 +157,87 @@ pub fn plan(settings: &TerrainSettings, camera: DVec2, (finest, coarsest): (u32,
     wanted
 }
 
+/// What a narrow view needs of the ground beyond the plan: where the eye
+/// is (world x, z, and its height over the ground), which way it looks
+/// in render space, and its field of view. The plan's levels give the
+/// ground a grid step of about a 200th of its distance, right for the
+/// usual 70°; a telephoto view magnifies that, so chunks in its frustum
+/// are split until their step is as small, to its scale, as the plan's is
+/// to 70°'s. Nothing is split for a view of 70° or more.
+#[derive(Clone, Copy, Debug)]
+pub struct View {
+    pub at: DVec2,
+    pub height: f32,
+    pub forward: Vec3,
+    /// Vertical field of view and width over height.
+    pub fov: f32,
+    pub aspect: f32,
+}
+
+/// The field of view the plan's levels are made for, radians.
+const USUAL_FOV: f32 = 70.0 * std::f32::consts::PI / 180.0;
+/// Step over distance that the plan's levels keep to at the usual field.
+const STEP_OVER_DISTANCE: f32 = 1.0 / 192.0;
+
+impl View {
+    /// The view, coarsely, for knowing when to plan again: the direction to
+    /// two degrees and the field to a tenth of a degree.
+    fn key(&self) -> Option<IVec4> {
+        if self.fov >= USUAL_FOV * 0.98 {
+            return None;
+        }
+        let q = |v: f32| (v * 28.6).round() as i32;
+        Some(IVec4::new(q(self.forward.x), q(self.forward.y), q(self.forward.z), (self.fov.to_degrees() * 10.0) as i32))
+    }
+}
+
+/// Splits the plan's chunks in a narrow view's frustum until their step
+/// is fine enough for it (see [`View`]). Chunks keep tiling the ground
+/// exactly once: a chunk is replaced by its four quarters.
+pub fn refine(wanted: &mut HashSet<Key>, settings: &TerrainSettings, view: &View) {
+    if view.fov >= USUAL_FOV * 0.98 {
+        return;
+    }
+    let limit = STEP_OVER_DISTANCE * view.fov / USUAL_FOV;
+    // Half the diagonal field, for a cone round the view.
+    let half = ((view.fov / 2.0).tan() * (1.0 + view.aspect * view.aspect).sqrt()).atan();
+    let radius = settings.radius;
+    let needs = |key: Key| -> bool {
+        if key.level == 0 {
+            return false;
+        }
+        let size = settings.size(key.level);
+        let centre = (key.coord.as_dvec2() + 0.5) * size;
+        let d = centre - view.at;
+        let flat = d.length() as f32;
+        let drop = radius.map_or(0.0, |r| crate::ground::drop_at(flat.min(r), r));
+        let to = Vec3::new(d.x as f32, -view.height - drop, d.y as f32);
+        let distance = to.length().max(1.0);
+        // In the cone, allowing for the chunk's own size.
+        let reach = (size as f32 * 0.75 / distance).min(1.5);
+        let angle = to.normalize().dot(view.forward).clamp(-1.0, 1.0).acos();
+        if angle > half + reach {
+            return false;
+        }
+        // Its nearest point, roughly: the centre less half a diagonal.
+        let near = (distance - size as f32 * 0.71).max(view.height.max(1.0));
+        settings.step(key.level) / near > limit
+    };
+    let mut todo: Vec<Key> = wanted.iter().copied().filter(|k| needs(*k)).collect();
+    while let Some(key) = todo.pop() {
+        if !wanted.remove(&key) {
+            continue;
+        }
+        for (dx, dz) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let child = Key { level: key.level - 1, coord: key.coord * 2 + IVec2::new(dx, dz) };
+            wanted.insert(child);
+            if needs(child) {
+                todo.push(child);
+            }
+        }
+    }
+}
+
 fn setup_material(mut commands: Commands, world: Res<WorldDef>, mut materials: ResMut<Assets<GroundMaterial>>) {
     commands.insert_resource(TerrainMaterial(materials.add(ground::material(&world.terrain))));
 }
@@ -193,6 +274,7 @@ fn stream_chunks(
     world: Res<WorldDef>,
     origin: Res<Origin>,
     camera: Single<(&Transform, &mut Projection), With<Camera3d>>,
+    window: Option<Single<&Window>>,
     mesh_handles: Query<&Mesh3d, With<Chunk>>,
 ) {
     let settings = &world.terrain;
@@ -202,10 +284,18 @@ fn stream_chunks(
     let span = settings.span(height);
     let here = (at / settings.size(span.0)).floor();
     let here = IVec2::new(here.x as i32, here.y as i32);
+    let fov = match &*projection {
+        Projection::Perspective(p) => p.fov,
+        _ => USUAL_FOV,
+    };
+    let aspect = window.map_or(16.0 / 9.0, |w| w.width() / w.height().max(1.0));
+    let view = View { at, height, forward: *camera.forward(), fov, aspect };
     let chunks = &mut *chunks;
-    if chunks.planned_for != Some((span, here)) {
+    if chunks.planned_for != Some((span, here, view.key())) {
         chunks.wanted = plan(settings, at, span);
-        chunks.planned_for = Some((span, here));
+        refine(&mut chunks.wanted, settings, &view);
+        debug!("terrain: {} chunks for levels {:?}, view {:?}", chunks.wanted.len(), span, view.key());
+        chunks.planned_for = Some((span, here, view.key()));
         if chunks.span.1 != span.1
             && let Projection::Perspective(p) = &mut *projection
         {
@@ -459,6 +549,50 @@ pub fn ground<G: Ground>(g: G) -> Arc<dyn Ground> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A narrow view splits chunks in its frustum only, and the plan still
+    /// tiles; a usual one changes nothing.
+    #[test]
+    fn a_narrow_view_refines_its_frustum() {
+        let moon = TerrainSettings { levels: 8, chunk_size: 64.0, radius: Some(1_737_400.0), ..Default::default() };
+        let at = DVec2::new(0.0, 0.0);
+        let span = moon.span(112_000.0);
+        let base = plan(&moon, at, span);
+        let forward = Vec3::new(-0.95, -0.3, 0.0).normalize();
+        let mut wide = base.clone();
+        refine(&mut wide, &moon, &View { at, height: 112_000.0, forward, fov: 70f32.to_radians(), aspect: 1.5 });
+        assert_eq!(wide, base);
+        let mut narrow = base.clone();
+        refine(&mut narrow, &moon, &View { at, height: 112_000.0, forward, fov: 12.8f32.to_radians(), aspect: 1.0 });
+        assert!(narrow.len() > base.len());
+        // Finer ground ahead (west), none behind: the level of the chunk
+        // holding a point 375 km off either way.
+        let level_at = |set: &HashSet<Key>, x: f64| {
+            set.iter()
+                .find(|k| {
+                    let (lo, size) = (k.coord.as_dvec2() * moon.size(k.level), moon.size(k.level));
+                    (lo.x..lo.x + size).contains(&x) && (lo.y..lo.y + size).contains(&10.0)
+                })
+                .map(|k| k.level)
+        };
+        assert!(level_at(&narrow, -375_000.0) < level_at(&base, -375_000.0));
+        assert_eq!(level_at(&narrow, 375_000.0), level_at(&base, 375_000.0));
+        let mut covered: HashMap<I64Vec2, u32> = HashMap::default();
+        for key in &narrow {
+            let (min, max) = key.span();
+            let step = 1i64 << span.0.min(key.level);
+            let mut z = min.y;
+            while z < max.y {
+                let mut x = min.x;
+                while x < max.x {
+                    *covered.entry(I64Vec2::new(x, z)).or_default() += 1;
+                    x += step;
+                }
+                z += step;
+            }
+        }
+        assert!(covered.values().all(|&n| n == 1));
+    }
 
     /// From high up the finest levels go and coarser ones come; on the
     /// ground nothing changes, and a plan of any span still tiles.
