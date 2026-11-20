@@ -10,7 +10,7 @@ import bevy_pbr::render::{
     view_transformations::position_world_to_clip,
 };
 
-// z: 1 / (2 · radius), or 0 on a flat world. The start of the extension's
+// z: 1 / (2 · radius), w: the radius; both 0 on a flat world. The start of the extension's
 // uniform, whatever follows it.
 struct Curve {
     at: vec4<f32>,
@@ -21,10 +21,17 @@ struct Curve {
 fn sink(world: vec4<f32>) -> vec4<f32> {
     let d = world.xz - view.world_position.xz;
     let d2 = dot(d, d);
-    let k = curve.at.z;
-    // The first two terms of R − √(R² − d²): the root itself loses every
-    // digit in single precision.
-    return vec4(world.x, world.y - d2 * k * (1.0 + d2 * k * k), world.z, world.w);
+    return vec4(world.x, world.y - drop(d2, curve.at.w), world.z, world.w);
+}
+
+// R − √(R² − d²), written as d² / (R + √(R² − d²)): the difference itself
+// loses every digit in single precision, the quotient none. `r` is 0 on a
+// flat world.
+fn drop(d2: f32, r: f32) -> f32 {
+    if r <= 0.0 {
+        return 0.0;
+    }
+    return d2 / (r + sqrt(max(r * r - d2, 0.0)));
 }
 
 @vertex

@@ -21,6 +21,7 @@ import bevy_pbr::render::{
 
 // `ground::GroundParams`.
 struct Ground {
+    // z: 1 / (2 · radius), w: the radius; 0 on a flat world.
     curve: vec4<f32>,
     // The floating origin, whole metres (a multiple of 256).
     origin: vec4<i32>,
@@ -51,7 +52,7 @@ fn sunlit(p: vec3<f32>, to_sun: vec3<f32>) -> f32 {
         return 1.0;
     }
     let dir = to_sun.xz / flat;
-    let rise = to_sun.y / flat;
+    let climb = to_sun.y / flat;
     let edge = ground.horizon.z;
     let texel = edge / 1024.0;
     var s = 2.0 * texel;
@@ -63,7 +64,8 @@ fn sunlit(p: vec3<f32>, to_sun: vec3<f32>) -> f32 {
         }
         let h = textureSampleLevel(horizon_map, horizon_sampler, uv, 0.0).r + ground.horizon.w;
         // A bias for what a coarse map makes of the point's own slope.
-        let over = p.y + rise * s - h + 0.15 * texel;
+        // The ray goes straight; the ground under it curves away.
+        let over = p.y + climb * s + s * s * ground.curve.z - h + 0.15 * texel;
         lowest = min(lowest, over / s);
         if lowest < -2.0 * ground.horizon_fade.w {
             break;
@@ -71,6 +73,29 @@ fn sunlit(p: vec3<f32>, to_sun: vec3<f32>) -> f32 {
         s *= 1.22;
     }
     return smoothstep(-ground.horizon_fade.w, ground.horizon_fade.w, lowest);
+}
+
+// What the vertex shader took off the height `√d2` from the camera
+// (`curve_vertex.wesl`).
+fn rise(d2: f32) -> f32 {
+    let r = ground.curve.w;
+    if r <= 0.0 {
+        return 0.0;
+    }
+    return d2 / (r + sqrt(max(r * r - d2, 0.0)));
+}
+
+// As in `curve_fragment.wesl`: a direction in the flat world's frame at a
+// point `away` from the camera, in the sphere's.
+fn on_sphere(v: vec3<f32>, away: vec2<f32>, sign: f32) -> vec3<f32> {
+    let r = ground.curve.w;
+    if r <= 0.0 {
+        return v;
+    }
+    let d2 = dot(away, away);
+    let up = vec3(away.x, sqrt(max(r * r - d2, 0.0)), away.y) / r;
+    let a = sign * vec3(up.z, 0.0, -up.x);
+    return v * up.y + cross(a, v) + a * dot(a, v) / (1.0 + up.y);
 }
 
 struct Lattice {
@@ -308,7 +333,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // shadow maps have it.
     let away = in.world_position.xz - view.world_position.xz;
     let away2 = dot(away, away);
-    pbr_input.world_position.y += away2 * ground.curve.z * (1.0 + away2 * ground.curve.z * ground.curve.z);
+    pbr_input.world_position.y += rise(away2);
+    // Its normal is the flat world's; the sphere turns it, by an angle that
+    // grows with the distance: a hundred kilometres off on the Moon the
+    // ground faces three degrees further from the camera.
+    pbr_input.N = normalize(on_sphere(pbr_input.N, away, 1.0));
     // Pattern weights: cobbles, setts, gravel, grass, regolith; the rest is
     // plain (see `ground::Pattern::weights`).
     let w = array<f32, 5>(in.uv.x, in.uv.y, in.uv_b.x, in.uv_b.y, in.color.a);
@@ -373,7 +402,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if ground.horizon_fade.z > 0.5 && lights.n_directional_lights > 0u && to_sun.y > -0.05 {
         let fade = smoothstep(ground.horizon_fade.x, ground.horizon_fade.y, sqrt(away2));
         if fade > 0.0 {
-            far = fade * (1.0 - sunlit(pbr_input.world_position.xyz, to_sun));
+            // The sun as it stands over that point: on a round world, lower
+            // or higher than over the camera.
+            let local_sun = on_sphere(to_sun, away, -1.0);
+            far = fade * (1.0 - sunlit(pbr_input.world_position.xyz, local_sun));
         }
     }
     var out: FragmentOutput;

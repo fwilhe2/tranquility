@@ -43,7 +43,7 @@ pub struct GroundDetail {
 /// shaders expect it.
 #[derive(ShaderType, Reflect, Debug, Clone, Default)]
 pub(crate) struct GroundParams {
-    /// z: 1 / (2 · radius), 0 when flat.
+    /// z: 1 / (2 · radius), w: the radius; 0 when flat.
     curve: Vec4,
     /// The floating origin in whole metres (x, z).
     origin: IVec4,
@@ -98,10 +98,11 @@ pub fn prop(base: StandardMaterial) -> PropMaterial {
 
 /// How far the ground has fallen away `distance` metres from the camera on
 /// a body of `radius`: what the vertex shaders subtract.
+/// A sphere's own drop, R − √(R² − d²), in a form that keeps its digits in
+/// single precision.
 pub fn drop_at(distance: f32, radius: f32) -> f32 {
-    let k = 1.0 / (2.0 * radius);
     let d2 = distance * distance;
-    d2 * k * (1.0 + d2 * k * k)
+    d2 / (radius + (radius * radius - d2).max(0.0).sqrt())
 }
 
 pub(crate) fn material(terrain: &TerrainSettings) -> GroundMaterial {
@@ -158,8 +159,9 @@ fn tell_shaders(
     mut grounds: ResMut<Assets<GroundMaterial>>,
     mut props: ResMut<Assets<PropMaterial>>,
 ) {
-    let k = world.terrain.radius.map_or(0.0, |r| 1.0 / (2.0 * r));
-    let curve = Vec4::new(0.0, 0.0, k, 0.0);
+    let r = world.terrain.radius.unwrap_or(0.0);
+    let k = if r > 0.0 { 1.0 / (2.0 * r) } else { 0.0 };
+    let curve = Vec4::new(0.0, 0.0, k, r);
     let at = IVec4::new(origin.0.x as i64 as i32, origin.0.y as i64 as i32, 0, 0);
     if let Some(terrain) = terrain {
         let stale = grounds.get(&terrain.0).is_some_and(|m| m.extension.params.curve != curve || m.extension.params.origin != at);

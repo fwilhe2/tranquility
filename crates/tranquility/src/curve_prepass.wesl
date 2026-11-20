@@ -27,8 +27,15 @@ fn sink(world: vec4<f32>) -> vec4<f32> {
     }
     let d = world.xz - view.world_position.xz;
     let d2 = dot(d, d);
-    let k = curve.at.z;
-    return vec4(world.x, world.y - d2 * k * (1.0 + d2 * k * k), world.z, world.w);
+    return vec4(world.x, world.y - drop(d2, curve.at.w), world.z, world.w);
+}
+
+// As in `curve_vertex.wesl`.
+fn drop(d2: f32, r: f32) -> f32 {
+    if r <= 0.0 {
+        return 0.0;
+    }
+    return d2 / (r + sqrt(max(r * r - d2, 0.0)));
 }
 
 @vertex
