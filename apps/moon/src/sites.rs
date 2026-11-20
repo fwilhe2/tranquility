@@ -377,7 +377,8 @@ impl Map {
     }
 }
 
-fn decode(bytes: &[u8]) -> (Vec<u8>, usize, usize) {
+/// A PNG's samples, its width and the samples to a pixel.
+pub fn decode(bytes: &[u8]) -> (Vec<u8>, usize, usize) {
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     let mut reader = decoder.read_info().expect("a site's PNG");
     let mut buf = vec![0; reader.output_buffer_size().expect("a sane size")];

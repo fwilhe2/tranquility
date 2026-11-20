@@ -362,9 +362,10 @@ fn mix(a: Rgb, b: Rgb, t: f32) -> Rgb {
 /// Not the real coastlines or the real storms: the same kind of world.
 fn paint(map: Map) -> Image {
     let (width, height) = match map {
-        Map::Mars | Map::Jupiter | Map::Saturn => (2048u32, 1024u32),
+        Map::Earth | Map::Mars | Map::Jupiter | Map::Saturn => (2048u32, 1024u32),
         _ => (1024, 512),
     };
+    let land = (map == Map::Earth).then(|| crate::sites::decode(EARTH));
     let mut data = Vec::with_capacity((width * height * 4) as usize);
     for j in 0..height {
         let lat = (0.5 - (j as f32 + 0.5) / height as f32) * std::f32::consts::PI;
@@ -372,7 +373,12 @@ fn paint(map: Map) -> Image {
             let lon = (i as f32 + 0.5) / width as f32 * std::f32::consts::TAU;
             let p = [(lat.cos() * lon.cos()) as f64, lat.sin() as f64, (lat.cos() * lon.sin()) as f64];
             let c = match map {
-                Map::Earth => earth(p, lat),
+                Map::Earth => {
+                    let (data, w, n) = land.as_ref().expect("the Earth's map");
+                    let rows = data.len() / (w * n);
+                    let k = ((j as usize * rows / height as usize) * w + i as usize * w / width as usize) * n;
+                    earth(p, lat, [data[k], data[k + 1], data[k + 2]])
+                }
                 Map::Mars => mars(p, lat),
                 Map::Jupiter => jupiter(p, lat),
                 Map::Saturn => saturn(p, lat),
@@ -392,22 +398,20 @@ fn paint(map: Map) -> Image {
     )
 }
 
-/// Oceans, continents green to tan by latitude and dryness, polar ice, and
-/// weather over all of it.
-fn earth(p: [f64; 3], lat: f32) -> Rgb {
-    let h = fbm3(p, 1.3, 6, 0.5, 21);
-    let d = fbm3(p, 2.2, 4, 0.5, 22);
+/// The Earth's land and sea in December, from NASA's Blue Marble Next
+/// Generation (`tools/earth.py`, `data/earth/SOURCES.md`): equirectangular,
+/// 180° W at the left edge, the layout the globe's texture has.
+const EARTH: &[u8] = include_bytes!("../data/earth/earth.png");
+
+/// The real continents and seas (`EARTH`, a pixel of it as `land`), with
+/// weather over them: not the weather of any day, the kind of weather the
+/// Earth has.
+fn earth(p: [f64; 3], lat: f32, land: [u8; 3]) -> Rgb {
     let polar = lat.abs() / std::f32::consts::FRAC_PI_2;
-    // The sea darkest, deeper further from shore.
-    let sea = mix([0.03, 0.09, 0.2], [0.012, 0.035, 0.11], -h * 4.0);
-    let green = mix([0.05, 0.11, 0.035], [0.1, 0.13, 0.05], d + 0.5);
-    let tan = [0.36, 0.27, 0.15];
-    // Deserts sit in the horse latitudes, forests at the equator and
-    // further poleward.
-    let arid = smoothstep(0.1, 0.5, 1.0 - (polar - 0.3).abs() * 4.0 + d * 1.5);
-    let mut c = mix(sea, mix(green, tan, arid), smoothstep(0.0, 0.03, h - 0.04));
-    let ice = smoothstep(0.78, 0.9, polar + 0.08 * d + 0.1 * h.max(0.0));
-    c = mix(c, [0.8, 0.83, 0.86], ice);
+    // Blue Marble is a picture, made bright to look at: back to linear,
+    // and down to the albedo of ocean (some 0.06) and land.
+    let linear = |v: u8| (v as f32 / 255.0).powf(2.2);
+    let mut c = land.map(|v| 0.75 * linear(v));
     // Weather: fronts drawn out along the latitudes and stirred.
     let s = fbm3(p, 1.1, 3, 0.5, 24) as f64 * 0.5;
     let q = [p[0] + s, p[1] * 2.2 - s, p[2] + s];
