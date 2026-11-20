@@ -29,6 +29,8 @@ SHOTS=(
   "mars-gale|Mars: Gale crater from Bradbury Landing, Mount Sharp 50 km off (MOLA heights, Viking colour)|TRANQUILITY_SITE=gale"
   "mars-olympus|The rim of Olympus Mons's summit caldera, 21 km up, the sky dark overhead|TRANQUILITY_SITE=olympus"
   "mars-ingenuity|Ingenuity climbing away at Jezero, flown through the rotor physics|TRANQUILITY_SITE=jezero MOON_FLY=behind,up,side TRANQUILITY_SHOT_AFTER=17"
+  "earthrise|Earthrise, 24 December 1968: the Earth over the Moon's far side as Apollo 8's 250 mm lens saw it at 75:48:39, turned as the photograph was printed (geometry from JPL Horizons, LOLA heights, Blue Marble Earth)|MOON_EARTHRISE=75:48:39,lens,printed,still"
+  "earthrise-window|Apollo 8, 75:47:32: the Earth coming up past the limb in Anders' window as Borman rolls the spacecraft, the horizon upright as the crew lay|MOON_EARTHRISE=75:47:32,still"
   "io-jupiter|Io's sulphur plains under Jupiter, twenty degrees across|TRANQUILITY_BODY=io TRANQUILITY_LOOK=0.43,0.3"
   "enceladus|Enceladus: a tiger stripe venting, Saturn's rings edge-on|TRANQUILITY_BODY=enceladus"
   "titan|Titan: the shore of a methane sea under orange haze|TRANQUILITY_BODY=titan"
@@ -62,9 +64,18 @@ for shot in "${SHOTS[@]}"; do
   for attempt in 1 2; do
     echo "== $name (attempt $attempt)"
     rm -f "$tmp/$name.png"
-    env TRANQUILITY_QUALITY=high TRANQUILITY_SIZE=1920x1080 TRANQUILITY_CLEAN=1 \
-      TRANQUILITY_SHOT_AFTER=4 $settings TRANQUILITY_SCREENSHOT="$tmp/$name.png" \
-      timeout 600 "$BIN" >"$tmp/$name.log" 2>&1 || true
+    if [ $attempt -eq 1 ]; then
+      env TRANQUILITY_QUALITY=high TRANQUILITY_SIZE=1920x1080 TRANQUILITY_CLEAN=1 \
+        TRANQUILITY_SHOT_AFTER=4 $settings TRANQUILITY_SCREENSHOT="$tmp/$name.png" \
+        timeout 600 "$BIN" >"$tmp/$name.log" 2>&1 || true
+    else
+      # Drawn off the screen instead: a second of video, its last frame.
+      # Some views lose the window's surface just when the shot is due.
+      env TRANQUILITY_QUALITY=high TRANQUILITY_SIZE=1920x1080 TRANQUILITY_CLEAN=1 \
+        $settings TRANQUILITY_RECORD="$tmp/$name.mp4" TRANQUILITY_RECORD_SECONDS=1 \
+        timeout 900 "$BIN" >"$tmp/$name.log" 2>&1 || true
+      [ -s "$tmp/$name.mp4" ] && ffmpeg -loglevel error -y -sseof -0.1 -i "$tmp/$name.mp4" -frames:v 1 "$tmp/$name.png" || true
+    fi
     if [ -s "$tmp/$name.png" ]; then
       magick "$tmp/$name.png" -resize "${WIDTH}x" -quality 86 "$OUT/$name.jpg"
       echo "   $OUT/$name.jpg"

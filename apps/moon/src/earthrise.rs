@@ -166,6 +166,8 @@ pub struct Earthrise {
     put_aside: Option<(String, String)>,
     /// When the shutter last went, for the flash.
     flash: f32,
+    /// Whether the ground has come in since the start.
+    ground: bool,
 }
 
 #[derive(Component)]
@@ -256,8 +258,9 @@ fn scene(moon: &crate::body::Body) -> Option<crate::body::Body> {
 
 /// `MOON_EARTHRISE=75:48:30` (or `=1`): the time to start at; and after
 /// a comma what to look through (`hatch`, `lens`, `free`) and `printed`,
-/// for pictures: `MOON_EARTHRISE=75:48:39,lens,printed`.
-fn asked() -> Option<(f64, View, bool)> {
+/// and `still` (the clock stopped), for pictures:
+/// `MOON_EARTHRISE=75:48:39,lens,printed,still`.
+fn asked() -> Option<(f64, View, bool, bool)> {
     let v = options::get("MOON_EARTHRISE")?;
     let mut words = v.split(',');
     let parts: Vec<f64> = words.next().unwrap_or("").split(':').filter_map(|p| p.trim().parse().ok()).collect();
@@ -265,17 +268,18 @@ fn asked() -> Option<(f64, View, bool)> {
         [h, m, s] => h * 3600.0 + m * 60.0 + s,
         _ => FROM,
     };
-    let (mut view, mut printed) = (View::Window, false);
+    let (mut view, mut printed, mut still) = (View::Window, false, false);
     for w in words {
         match w.trim() {
             "hatch" => view = View::Hatch,
             "lens" => view = View::Lens,
             "free" => view = View::Free,
             "printed" => printed = true,
+            "still" => still = true,
             _ => {}
         }
     }
-    Some((clock, view, printed))
+    Some((clock, view, printed, still))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -318,12 +322,13 @@ fn toggle(
     }
     let Some(body) = scene(moon) else { return };
     crate::arrive(&mut commands, &mut current, body);
-    let (clock, view, published) = from.unwrap_or((FROM, View::Window, false));
+    let (clock, view, published, paused) = from.unwrap_or((FROM, View::Window, false, false));
     *e = Earthrise {
         on: true,
         clock,
         view,
         published,
+        paused,
         pace: 1.0,
         put_aside: Some((hud.info.clone(), hud.keys.clone())),
         free: Vec2::new(0.0, -0.3),
@@ -372,6 +377,7 @@ fn fly(
     world: Res<WorldDef>,
     origin: Res<Origin>,
     current: Res<Current>,
+    chunks: Res<tranquility::terrain::Chunks>,
     mut e: ResMut<Earthrise>,
     mut hud: ResMut<Hud>,
     camera: Single<(&mut Transform, &mut Projection), With<Player>>,
@@ -408,7 +414,11 @@ fn fly(
         e.said = WORDS.iter().take_while(|w| w.0 < clock - 6.0).count();
         e.shot = FRAMES.iter().take_while(|f| f.0 < clock).count();
     }
-    if !e.paused {
+    // The clock waits for the ground to come in first.
+    if chunks.is_settled() {
+        e.ground = true;
+    }
+    if !e.paused && e.ground {
         e.clock += dt * e.pace;
     }
     if keys.just_pressed(KeyCode::KeyV) {
