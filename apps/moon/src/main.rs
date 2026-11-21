@@ -76,6 +76,16 @@ fn main() {
         sound::render(&path, &start).expect("writing the sound");
         return;
     }
+    // A recording of an Earthrise film is as long as the film (less the
+    // second the recorder waits once the ground is in).
+    #[cfg(not(target_arch = "wasm32"))]
+    if std::env::var_os("TRANQUILITY_RECORD").is_some()
+        && std::env::var_os("TRANQUILITY_RECORD_SECONDS").is_none()
+        && let Some(length) = earthrise::film_length()
+    {
+        // SAFETY: nothing else runs yet; no thread reads the environment.
+        unsafe { std::env::set_var("TRANQUILITY_RECORD_SECONDS", format!("{:.2}", length - 1.0)) };
+    }
     let mut app = tranquility::app(start.world());
     app.insert_resource(Current(start))
         .insert_resource(Catalogue(bodies))

@@ -12,6 +12,10 @@
 # make stroll                     the moon app touring its bodies, hands off
 # make video [VIDEO=stroll.mp4] [SECONDS=600] [SIZE=1920x1080] [QUALITY=high]
 #                                 records that, offline, smooth at 60 fps
+# make earthrise [CUT=short|long]  Apollo 8's Earthrise as a film, in real time:
+#                                 earthrise-short.mp4 (about 2 min) or
+#                                 earthrise-long.mp4 (about 5 min), recorded
+# make watch-earthrise [CUT=…]    the same film live, with sound
 
 APP ?= moon
 OUT ?= shot.png
@@ -19,8 +23,9 @@ VIDEO ?= stroll.mp4
 SECONDS ?= 600
 SIZE ?= 1920x1080
 QUALITY ?= high
+CUT ?= short
 
-.PHONY: run release web serve shot stroll video gallery check clean
+.PHONY: run release web serve shot stroll video gallery earthrise watch-earthrise check clean
 
 # wasm-bindgen's CLI must match the crate version in Cargo.lock exactly, so a
 # matching copy is installed into .tools/ instead of relying on a global one.
@@ -54,6 +59,14 @@ gallery:
 stroll:
 	cargo build --release -p moon
 	MOON_STROLL=tour target/release/moon
+
+earthrise:
+	cargo build --release -p moon
+	TRANQUILITY_QUALITY=$(QUALITY) TRANQUILITY_SIZE=$(SIZE) TRANQUILITY_RECORD=earthrise-$(CUT).mp4 MOON_EARTHRISE=film,$(CUT) target/release/moon
+
+watch-earthrise:
+	cargo build --release -p moon
+	MOON_EARTHRISE=film,$(CUT) target/release/moon
 
 video:
 	cargo build --release -p moon
