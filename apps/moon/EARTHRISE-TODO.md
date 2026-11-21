@@ -63,9 +63,13 @@ shutter, credits in `data/earthrise/SOURCES.md`.
 - [ ] **Browser build** not tried with the scene: `make web APP=moon` and
       `#earthrise=75:48:39,lens` (options read the address hash). The
       embedded data has grown: Pasteur 4.4 MB, Earth 2.6 MB.
-- [ ] **Ultra** (`QUALITY=ultra`) is untried: record the films with it on
-      a GPU that meets the README's table, and check the motion blur and
-      the finer ground in the lens view.
+- [x] **Ultra** recorded (short cut at 4K, and the stroll): the limb was
+      notched and cut straight while the lens turned. Chunk culling boxes
+      now sink by the curve's drop at their distance, and recordings hold
+      the clock until the ground is in. Checked at 480×270 on High.
+- [ ] **Ultra again**: record the short cut at ultra once more and look
+      at the turn (75:48:43 to 75:48:57) frame by frame; and the streaky
+      shading inside near craters in the stroll (shadow acne?).
 - [ ] **Benchmark** the touring stroll and the other bodies after the
       engine changes (span, refine, sky turn). On the ground they should
       be unchanged; Hadley's look was checked against the gallery.
