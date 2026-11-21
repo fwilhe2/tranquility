@@ -10,6 +10,7 @@
 
 mod bodies;
 mod body;
+mod cabin;
 mod craters;
 mod descent;
 mod earthrise;

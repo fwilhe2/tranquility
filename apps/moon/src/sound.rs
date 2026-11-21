@@ -425,13 +425,20 @@ impl Plugin for SoundPlugin {
             return;
         }
         app.insert_resource(Line(Arc::new(Mutex::new(Said::default()))))
+            .insert_resource(CabinLine(Arc::new(Mutex::new(crate::cabin::Aboard::default()))))
             .add_systems(Startup, start)
             .add_systems(Update, tell.after(Striding));
     }
 }
 
-fn start(mut commands: Commands, mut synths: ResMut<Assets<Synth>>, line: Res<Line>) {
+/// What the command module's cabin should sound (see `cabin`): the
+/// Earthrise scene writes to it.
+#[derive(Resource, Clone)]
+pub struct CabinLine(pub Arc<Mutex<crate::cabin::Aboard>>);
+
+fn start(mut commands: Commands, mut synths: ResMut<Assets<Synth>>, line: Res<Line>, cabin: Res<CabinLine>) {
     play(&mut commands, &mut synths, Suit::new(line.0.clone()));
+    play(&mut commands, &mut synths, crate::cabin::Cabin::new(cabin.0.clone()));
 }
 
 /// Once a frame: what the voice should know.
@@ -446,12 +453,17 @@ fn tell(
     craft: Option<Single<(&Rotorcraft, &Transform), With<Helicopter>>>,
     mut falls: MessageReader<Footfall>,
     stroll: Option<Res<crate::stroll::Stroll>>,
+    earthrise: Option<Res<crate::earthrise::Earthrise>>,
 ) {
     let (player, ear) = player.into_inner();
     let Ok(mut said) = line.0.lock() else { return };
     said.medium = Medium::of(&current.0);
     // Down to a whisper while the picture is black, never quite silent.
     said.level = 1.0 - 0.85 * stroll.as_ref().map_or(0.0, |s| s.dark);
+    // Aboard the command module there is no suit: the cabin speaks.
+    if earthrise.is_some_and(|e| e.on) {
+        said.level = 0.0;
+    }
     let aboard = driving.is_some_and(|d| d.aboard);
     // Work: nothing standing, a quarter at a walk, all of it at a lope
     // uphill.
