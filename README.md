@@ -126,6 +126,7 @@ rate of descent a foot per second), **Shift+P** lets P65 land it,
 chase camera to the ground, and **R** steps out once down. **I** opens a
 card about the body underfoot. On Phobos and Enceladus, where nobody
 walks, the movement keys fire suit jets while you are off the ground.
+**E** goes aboard Apollo 8 for the Earthrise (below) and back.
 **0** starts the stroll (below); `MOON_STROLL=1` starts in it;
 `MOON_FLY=behind|onboard|eyes` (with `up` or `low`) starts at a
 helicopter's controls.
@@ -163,6 +164,37 @@ endless walk on any of the nine bodies.
   `…/#stroll=tour&body=mars&stay=120` (any option, named without its
   `MOON_` or `TRANQUILITY_`). Click once for sound: browsers keep it off
   until then.
+
+## Earthrise
+
+**E** puts you aboard Apollo 8 on 24 December 1968, 112 km over the
+Moon's far side on the fourth orbit, at 75:46 ground elapsed time: Frank
+Borman rolls the spacecraft, the Earth comes up over the horizon in Bill
+Anders' window, the crew scramble for colour film, and Anders takes
+AS08-14-2383 through the hatch window at 75:48:39. The geometry is the
+record's (the Sun and the Earth from JPL Horizons, the ground under the
+track from LOLA and Clementine, the Earth's continents from Blue Marble;
+`apps/moon/data/earthrise/SOURCES.md`), the crew's words come from the
+onboard tape, and the cabin is heard: its fans, the jets of the roll, the
+Hasselblad's shutter and motor. **V** changes the view (window 5, the
+hatch window, the 250 mm lens, looking round), **O** turns the picture
+the way it was printed, **Space** pauses, **←/→** go back and forth 15 s,
+**↑/↓** change the pace.
+
+It also plays as a film, directed, in real time: a title, the views
+changed on cue (the black and white frame through the lens, the Earth
+crossing to the hatch window, the colour photograph turned slowly to the
+way it was printed), the crew's words as subtitles, a closing card.
+
+```sh
+make watch-earthrise CUT=short   # live: the 1½ minutes up to the photograph
+make earthrise CUT=short         # recorded: earthrise-short.mp4, 2 min
+make earthrise CUT=long          # earthrise-long.mp4, 4¾ min, from before the roll
+```
+
+(`MOON_EARTHRISE=film,short` or `=film`; a recording is as long as the
+film. `MOON_EARTHRISE=75:48:39,lens,printed,still` holds a moment for a
+picture.)
 
 ## Recording a video
 

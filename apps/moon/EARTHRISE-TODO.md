@@ -21,7 +21,7 @@ shutter, credits in `data/earthrise/SOURCES.md`.
       plan follows the turning view, making the swapchain acquire miss that
       frame. Check for dropped frames on screen, too. Workaround: the
       recorder (`TRANQUILITY_RECORD`, last frame through ffmpeg).
-- [ ] **README.** A section on the Earthrise under "The moon app", and `E`
+- [x] **README.** A section on the Earthrise under "The moon app", and `E`
       under "Controls". Nothing in the README mentions the scene yet.
 - [ ] **Verify the new clock start** (it waits for the ground to settle,
       and `still` holds it). Pressing E while walking may start the clock
@@ -41,15 +41,25 @@ shutter, credits in `data/earthrise/SOURCES.md`.
       hatch 70° round from window 5, one rounded frame for all of them. The
       real windows' shapes and orientations would make the view more
       faithful.
-- [ ] **Sound.** The scene is silent but for the suit. Synthesise the cabin
-      (fans, the Hasselblad's shutter and film advance at the three frames)
-      in `src/sound.rs`. Never load recordings.
+- [x] **Sound.** `src/cabin.rs`: fans, 400 Hz, the glycol pump, the
+      service module's jets (bursts as the roll starts and stops, deadband
+      fdocs/gallery/earthrise.jpgirings between), the Hasselblad's shutter and winder, a magazine.
+      The suit is silent aboard.
+- [x] **Film.** `MOON_EARTHRISE=film[,short]`, `make earthrise CUT=…`:
+      directed views, subtitles, title and closing card, black and white
+      through the lens until the colour magazine.
+- [ ] **Magazine time** (75:48:12) is a guess between the tape's lines;
+      the roll's ease-out (5 s, like its start) too.
+- [ ] **Crew voices** are subtitles only. Synthesised speech would cheapen
+      it; the tape itself is public domain (NASA) but the rule is that
+      sound is synthesised, never loaded: leave as is unless that changes.
 - [ ] **The spacecraft itself.** There is no command module model. A
       simple one would help the free view, and could show in the windows'
       edges.
 - [ ] **Clouds** are procedural, not 24 December 1968's weather (no global
-      record exists). Leave them, or paint them loosely after the
-      photograph and say so in `data/earth/SOURCES.md`.
+      record exists); they now follow December's climate in kind (ITCZ,
+      subtropical clear skies, lows in the storm tracks). Could be painted
+      loosely after the photograph.
 - [ ] **Browser build** not tried with the scene: `make web APP=moon` and
       `#earthrise=75:48:39,lens` (options read the address hash). The
       embedded data has grown: Pasteur 4.4 MB, Earth 2.6 MB.
