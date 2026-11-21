@@ -185,7 +185,9 @@ impl Voice for Cabin {
             out[0] += l;
             out[1] += r;
         }
-        out.map(|x| soften(1.6 * x))
+        // Held under 0.85 of full scale, so the encoder's overshoot on a
+        // run of jets stays below it.
+        out.map(|x| 0.85 * soften(1.6 * x))
     }
 }
 

@@ -502,7 +502,9 @@ fn jets() -> Vec<(f64, f32, f32)> {
         let mut t = from;
         let mut k = 0;
         while t < from + EASE {
-            let s = 0.8 + 0.3 * unit(k, salt) as f32;
+            // Two jets across the spacecraft, heard as one bang: each
+            // about half as loud as a lone firing.
+            let s = 0.5 + 0.2 * unit(k, salt) as f32;
             out.push((t, -0.6, s));
             out.push((t + 0.004, 0.6, s));
             t += 0.32 + 0.25 * unit(k, salt + 1);
@@ -1073,4 +1075,41 @@ fn cabin(e: Res<Earthrise>, line: Option<Res<crate::sound::CabinLine>>, mut was:
         }
     }
     *was = (e.clock, e.fired, e.shot, e.on);
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use tranquility::sound::{RATE, Voice};
+
+    use super::*;
+    use crate::cabin::{Aboard, Cabin, Clunk};
+
+    /// The loudest stretch of the scene, the run of jets as the roll
+    /// starts, stays under full scale with room for the encoder: AAC
+    /// overshoots a signal driven to the limit by a decibel or two.
+    #[test]
+    fn the_roll_s_jets_leave_headroom() {
+        let line = Arc::new(Mutex::new(Aboard { level: 1.0, ..Default::default() }));
+        let mut cabin = Cabin::new(line.clone());
+        let jets = jets();
+        let mut next = 0;
+        let start = ROLL_FROM - 2.0;
+        let mut peak = 0.0f32;
+        for i in 0..((EASE + 4.0) * RATE as f64) as usize {
+            let t = start + i as f64 / RATE as f64;
+            while next < jets.len() && jets[next].0 <= t {
+                let (at, pan, strength) = jets[next];
+                if at >= start {
+                    line.lock().unwrap().clunks.push(Clunk::Jet { pan, strength });
+                }
+                next += 1;
+            }
+            // The cabin reads its line every 256 samples; push in time.
+            let [l, r] = cabin.frame();
+            peak = peak.max(l.abs()).max(r.abs());
+        }
+        assert!(peak > 0.3 && peak < 0.8, "peak {peak}");
+    }
 }
