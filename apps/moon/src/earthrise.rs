@@ -484,7 +484,8 @@ fn asked() -> Option<Asked> {
     Some(a)
 }
 
-/// The asked film's length, for a recording of it: `moon --film-length`.
+/// The asked film's length, for a recording of it (natively only).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn film_length() -> Option<f64> {
     asked()?.film.map(Cut::length)
 }
