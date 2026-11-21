@@ -10,4 +10,6 @@ Marble Next Generation (Reto Stöckli)*.
 It is the land and sea without clouds, in December: the season of Apollo 8.
 The clouds over it are painted by the app (`src/heavens.rs`) and are not
 the weather of any real day; no global picture of the clouds of 24 December
-1968 exists to draw them from.
+1968 exists to draw them from. They follow December's climate only in
+kind: a broken rain belt just south of the equator, clear skies under the
+subtropical highs, fronts wound into lows along the storm tracks.
