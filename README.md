@@ -193,7 +193,8 @@ make earthrise CUT=long          # earthrise-long.mp4, 4¾ min, from before the 
 ```
 
 (`MOON_EARTHRISE=film,short` or `=film`; a recording is as long as the
-film. `MOON_EARTHRISE=75:48:39,lens,printed,still` holds a moment for a
+film; `QUALITY=ultra` records it at the best picture, see
+[Ultra](#ultra-the-best-picture-on-a-fast-gpu). `MOON_EARTHRISE=75:48:39,lens,printed,still` holds a moment for a
 picture.)
 
 ## Recording a video
@@ -225,6 +226,53 @@ driver's timeout. Recording at 1080p on the High tier, an Intel UHD 620
 went past it as the tour changed into Mars, where the air is computed
 (the driver reset the GPU and the recording stopped; at 640×360 it went
 through). `make video QUALITY=medium` asks less of each frame.
+
+### Ultra: the best picture, on a fast GPU
+
+`TRANQUILITY_QUALITY=ultra` is a tier for recordings only (nothing picks
+it for you and **Q** never reaches it). Compared with High:
+
+- the sun's shadow maps are 8192² (four cascades, out to 6 km), and two
+  more levels of the ground cast shadows, so distant crater rims shade
+  what lies behind them;
+- the ground in view is cut twice as fine each way: the frustum
+  refinement the 250 mm lens uses, applied to every view;
+- SSAO at its finest, and motion blur of half a frame's shutter (1/120 s
+  at 60 fps), as a film camera's would be; `TRANQUILITY_OFF=motionblur`
+  leaves it out;
+- the recorder draws every frame at twice the size each way and scales it
+  down with Lanczos (four samples a pixel), and encodes at CRF 12 with
+  x264's slower preset.
+
+```sh
+make earthrise CUT=long QUALITY=ultra                  # 1920×1080, drawn at 3840×2160
+make earthrise CUT=short QUALITY=ultra SIZE=3840x2160  # 4K, drawn at 7680×4320
+make video QUALITY=ultra SECONDS=600                   # the touring stroll
+TRANQUILITY_SUPERSAMPLE=1 make earthrise QUALITY=ultra # ultra, drawn at the video's size
+```
+
+`TRANQUILITY_SUPERSAMPLE=N` and `TRANQUILITY_RECORD_CRF=N` (lower is
+better, 0 lossless) also work on their own with any tier. A drawn frame
+stays within 8192 pixels each way; past that the supersampling steps
+down and says so.
+
+What it takes. These are estimates from what the tier allocates, not
+measurements; the speed of the GPU only changes how long a recording
+takes, but its memory and the driver's timeout for one frame are hard
+limits:
+
+| | 1080p (drawn at 3840×2160) | 4K (drawn at 7680×4320) |
+|---|---|---|
+| GPU memory | at least 4 GB (the shadow maps alone are 1 GB) | at least 8 GB, 12 GB or more is safer |
+| Apple silicon (Metal) | M1 Pro / M2 Pro class or newer, 16 GB unified memory | M2 Max / M3 Pro class or newer, 32 GB unified memory |
+| NVIDIA (Vulkan) | GeForce RTX 2060 / GTX 1070 class, 6–8 GB | RTX 3080 / 4070 class, 12 GB |
+| AMD (Vulkan) | Radeon RX 5700 / 6600 XT class, 8 GB | RX 6800 / 7800 XT class, 16 GB |
+
+Integrated GPUs and anything with less memory should stay on High. Each
+frame is read back and piped to `ffmpeg` (130 MB a frame at 7680×4320),
+so a fast disk and a few GB of free RAM help too. On macOS, `ffmpeg`
+from Homebrew has libx264; Linux needs ALSA's headers for the sound
+(`libasound2-dev`).
 
 A recording cut short (the window closed, Ctrl-C, the GPU reset) is
 finished with what it has: the frames already drawn come out as the video

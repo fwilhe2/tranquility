@@ -63,6 +63,9 @@ shutter, credits in `data/earthrise/SOURCES.md`.
 - [ ] **Browser build** not tried with the scene: `make web APP=moon` and
       `#earthrise=75:48:39,lens` (options read the address hash). The
       embedded data has grown: Pasteur 4.4 MB, Earth 2.6 MB.
+- [ ] **Ultra** (`QUALITY=ultra`) is untried: record the films with it on
+      a GPU that meets the README's table, and check the motion blur and
+      the finer ground in the lens view.
 - [ ] **Benchmark** the touring stroll and the other bodies after the
       engine changes (span, refine, sky turn). On the ground they should
       be unchanged; Hadley's look was checked against the gallery.

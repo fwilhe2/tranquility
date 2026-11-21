@@ -16,6 +16,8 @@
 #                                 earthrise-short.mp4 (about 2 min) or
 #                                 earthrise-long.mp4 (about 5 min), recorded
 # make watch-earthrise [CUT=…]    the same film live, with sound
+#                                 QUALITY=ultra (and SIZE=3840x2160) for the best picture
+#                                 on a fast GPU: README, "Ultra"
 
 APP ?= moon
 OUT ?= shot.png
