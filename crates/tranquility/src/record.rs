@@ -12,6 +12,14 @@
 //! picture is drawn off the screen, into an image of exactly
 //! `TRANQUILITY_SIZE` (1920x1080 unless given), whatever the window and the
 //! screen are: the window stays black meanwhile.
+//!
+//! For the best picture, `TRANQUILITY_SUPERSAMPLE=2` draws every frame at
+//! twice the size each way and has `ffmpeg` scale it down (Lanczos): four
+//! samples a pixel, edges and fine ground without shimmer.
+//! `TRANQUILITY_RECORD_CRF` sets the encoder's quality (lower is better:
+//! 16 by default, 0 lossless). `TRANQUILITY_QUALITY=ultra` makes the
+//! defaults 2 and 12, with x264's slower preset. The drawn frame may be
+//! at most 8192 pixels each way.
 
 use std::{
     io::Write,
@@ -54,6 +62,11 @@ pub struct Recorder {
     /// has differed.
     size: Option<(u32, u32)>,
     resized: bool,
+    /// The video's size, when the frames are drawn larger and scaled down
+    /// to it; the encoder's CRF and preset.
+    out: UVec2,
+    crf: u32,
+    preset: &'static str,
 }
 
 /// A recording cut short (the window closed, Ctrl-C, the GPU lost) is
@@ -84,6 +97,17 @@ pub(crate) fn add(app: &mut App) {
         .ok()
         .and_then(|s| s.split_once('x').and_then(|(w, h)| Some(UVec2::new(w.trim().parse().ok()?, h.trim().parse().ok()?))))
         .unwrap_or(UVec2::new(1920, 1080));
+    let ultra = std::env::var("TRANQUILITY_QUALITY").is_ok_and(|q| q == "ultra");
+    let wanted = std::env::var("TRANQUILITY_SUPERSAMPLE").ok().and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(if ultra { 2 } else { 1 }).max(1);
+    // As much as fits in the largest texture a GPU is sure to allow.
+    let factor = (1..=wanted).rev().find(|f| size.x * f <= 8192 && size.y * f <= 8192).unwrap_or(1);
+    if factor != wanted {
+        warn!("record: {}x{} drawn {wanted} times over is past 8192 pixels; drawing it {factor} times over", size.x, size.y);
+    }
+    let out = size;
+    let size = size * factor;
+    let crf = std::env::var("TRANQUILITY_RECORD_CRF").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(if ultra { 12 } else { 16 });
+    let preset = if ultra { "slower" } else { "slow" };
     let image = {
         let mut images = app.world_mut().resource_mut::<Assets<Image>>();
         images.add(Image::new_target_texture(size.x, size.y, TextureFormat::Rgba8UnormSrgb, None))
@@ -105,6 +129,9 @@ pub(crate) fn add(app: &mut App) {
             finished: false,
             size: None,
             resized: false,
+            out,
+            crf,
+            preset,
         })
         .add_systems(Last, roll.in_set(Rolling));
 }
@@ -173,6 +200,15 @@ fn take(captured: On<ScreenshotCaptured>, mut recorder: ResMut<Recorder>) {
     let size = *recorder.size.get_or_insert((width, height));
     if recorder.encoder.is_none() {
         let video = format!("{}.video.mp4", recorder.path);
+        // Drawn larger than the video: scaled down to it, sharply.
+        let scale = if (size.0, size.1) != (recorder.out.x, recorder.out.y) {
+            format!("scale={}:{}:flags=lanczos,", recorder.out.x, recorder.out.y)
+        } else {
+            String::new()
+        };
+        let filter = format!("{scale}crop=trunc(iw/2)*2:trunc(ih/2)*2");
+        let crf = recorder.crf.to_string();
+        let preset = recorder.preset;
         let size = format!("{}x{}", size.0, size.1);
         let rate = FPS.to_string();
         let mut command = Command::new("ffmpeg");
@@ -183,7 +219,7 @@ fn take(captured: On<ScreenshotCaptured>, mut recorder: ResMut<Recorder>) {
         let child = command
             .args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", &size, "-r", &rate, "-i", "-"])
             // Even dimensions, for 4:2:0.
-            .args(["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "slow", "-crf", "16", "-pix_fmt", "yuv420p", &video])
+            .args(["-vf", &filter, "-c:v", "libx264", "-preset", preset, "-crf", &crf, "-pix_fmt", "yuv420p", &video])
             .stdin(Stdio::piped())
             .spawn();
         match child {
