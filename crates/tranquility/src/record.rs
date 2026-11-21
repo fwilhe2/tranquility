@@ -13,6 +13,14 @@
 //! `TRANQUILITY_SIZE` (1920x1080 unless given), whatever the window and the
 //! screen are: the window stays black meanwhile.
 //!
+//! The clock waits for the ground. When the view turns or moves into ground
+//! not yet streamed in (a telephoto lens swinging, finer chunks to mesh),
+//! the frame is held: the clock stops, nothing is taken, and the camera
+//! keeps to where the last frame was taken from, until every chunk wanted
+//! is there (or [`HOLD_LIMIT`] has passed). Then the clock goes on, and the
+//! frame after a hold moves from the one before it as any other does, so
+//! motion blur and the antialiasing's history carry on unbroken.
+//!
 //! For the best picture, `TRANQUILITY_SUPERSAMPLE=2` draws every frame at
 //! twice the size each way and has `ffmpeg` scale it down (Lanczos): four
 //! samples a pixel, edges and fine ground without shimmer.
@@ -41,6 +49,9 @@ use bevy::{
 /// Frames a second, of the picture and of the clock.
 pub const FPS: u32 = 60;
 
+/// The longest a frame is held for the ground, in seconds of real time.
+const HOLD_LIMIT: f64 = 30.0;
+
 /// The recording in progress.
 #[derive(Resource)]
 pub struct Recorder {
@@ -67,6 +78,13 @@ pub struct Recorder {
     out: UVec2,
     crf: u32,
     preset: &'static str,
+    /// Where the camera was when the last frame was taken, in render
+    /// space; when the present hold began (real time); holds so far, and
+    /// how many updates they took.
+    shot_from: Option<GlobalTransform>,
+    holding: Option<f64>,
+    holds: u32,
+    held: u32,
 }
 
 /// A recording cut short (the window closed, Ctrl-C, the GPU lost) is
@@ -132,6 +150,10 @@ pub(crate) fn add(app: &mut App) {
             out,
             crf,
             preset,
+            shot_from: None,
+            holding: None,
+            holds: 0,
+            held: 0,
         })
         .add_systems(Last, roll.in_set(Rolling));
 }
@@ -152,8 +174,24 @@ fn aim_cameras(mut commands: Commands, canvas: Res<Canvas>, cameras: Query<Entit
     }
 }
 
-fn roll(mut commands: Commands, time: Res<Time>, terrain: Res<crate::terrain::Chunks>, canvas: Res<Canvas>, mut recorder: ResMut<Recorder>, mut exit: MessageWriter<AppExit>) {
+fn roll(
+    mut commands: Commands,
+    time: Res<Time>,
+    real: Res<Time<Real>>,
+    terrain: Res<crate::terrain::Chunks>,
+    canvas: Res<Canvas>,
+    mut recorder: ResMut<Recorder>,
+    mut clock: ResMut<TimeUpdateStrategy>,
+    mut camera: Query<(&mut Transform, &mut GlobalTransform), With<Camera3d>>,
+    mut shifted: MessageReader<crate::origin::OriginShifted>,
+    mut exit: MessageWriter<AppExit>,
+) {
     let t = time.elapsed_secs();
+    for shift in shifted.read() {
+        if let Some(from) = &mut recorder.shot_from {
+            *from = GlobalTransform::from(from.compute_transform().with_translation(from.translation() - shift.delta));
+        }
+    }
     if recorder.settled.is_none() && t > 2.0 && terrain.is_settled() {
         recorder.settled = Some(t);
         info!("record: the ground is in; recording {} s to {}", recorder.seconds, recorder.path);
@@ -161,12 +199,44 @@ fn roll(mut commands: Commands, time: Res<Time>, terrain: Res<crate::terrain::Ch
     let Some(settled) = recorder.settled else { return };
     // A moment for the antialiasing and the sky to settle.
     let due = recorder.asked < (recorder.seconds * FPS as f32) as u32;
-    recorder.rolling = t > settled + 1.0 && due;
+    let rolling = t > settled + 1.0 && due;
+    let mut camera = camera.iter_mut().next();
+    if rolling && !terrain.is_settled() {
+        let now = real.elapsed_secs_f64();
+        let since = *recorder.holding.get_or_insert(now);
+        if let Some(from) = recorder.shot_from
+            && now - since < HOLD_LIMIT
+        {
+            if since == now {
+                recorder.holds += 1;
+                *clock = TimeUpdateStrategy::ManualDuration(Duration::ZERO);
+            }
+            recorder.held += 1;
+            recorder.rolling = false;
+            // Drawn from where the last frame was, so the next frame's
+            // motion is measured from there; the transform is marked so
+            // the next update draws the camera from where it really is
+            // again, before it is held once more.
+            if let Some((transform, global)) = &mut camera {
+                **global = from;
+                transform.set_changed();
+            }
+            return;
+        }
+        if now - since >= HOLD_LIMIT {
+            warn!("record: the ground did not come in {HOLD_LIMIT} s; going on without it");
+        }
+    }
+    if recorder.holding.take().is_some() {
+        *clock = TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(1.0 / FPS as f64));
+    }
+    recorder.rolling = rolling;
     if recorder.rolling {
         recorder.asked += 1;
+        recorder.shot_from = camera.map(|(_, global)| *global);
         commands.spawn(Screenshot::image(canvas.0.clone())).observe(take);
         if recorder.asked.is_multiple_of(FPS * 10) {
-            info!("record: {} s of {}", recorder.asked / FPS, recorder.seconds);
+            info!("record: {} s of {}; held {} times for the ground, {} updates", recorder.asked / FPS, recorder.seconds, recorder.holds, recorder.held);
         }
     } else if !due && recorder.written >= recorder.asked && !recorder.finished {
         recorder.finished = true;
