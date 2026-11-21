@@ -13,3 +13,7 @@ the weather of any real day; no global picture of the clouds of 24 December
 1968 exists to draw them from. They follow December's climate only in
 kind: a broken rain belt just south of the equator, clear skies under the
 subtropical highs, fronts wound into lows along the storm tracks.
+
+The sea is drawn dark and nearly even, as it looks from space: the map's
+sea shows the ocean's depth, pale over the continental shelves, and only a
+trace of that is kept.

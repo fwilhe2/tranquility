@@ -411,7 +411,15 @@ fn earth(p: [f64; 3], lat: f32, land: [u8; 3]) -> Rgb {
     // Blue Marble is a picture, made bright to look at: back to linear,
     // and down to the albedo of ocean (some 0.06) and land.
     let linear = |v: u8| (v as f32 / 255.0).powf(2.2);
-    let mut c = land.map(|v| 0.75 * linear(v));
+    // Blue Marble's sea shows the depth, pale over the shelves; seen from
+    // space the sea is dark and nearly even. Kept: a trace of the depth.
+    let [r, g, b] = land.map(|v| v as f32);
+    let mut c = if b > r + 12.0 && b >= g && r < 80.0 && g < 140.0 {
+        let shallow = ((linear(land[2]) - 0.06) * 4.0).clamp(0.0, 1.0);
+        mix([0.011, 0.02, 0.048], [0.02, 0.042, 0.075], shallow)
+    } else {
+        land.map(|v| 0.75 * linear(v))
+    };
     // Where weather is, in December: the rain belt just south of the
     // equator, clear skies under the subtropical highs, the storm tracks
     // of the middle latitudes, low cloud toward the poles.
@@ -420,36 +428,44 @@ fn earth(p: [f64; 3], lat: f32, land: [u8; 3]) -> Rgb {
     let climate = 0.08 * bell(deg, -6.0, 6.0) - 0.24 * (bell(deg, 24.0, 9.0) + bell(deg, -25.0, 9.0))
         + 0.1 * (bell(deg, 50.0, 11.0) + bell(deg, -52.0, 10.0))
         + 0.06 * polar;
-    // Lows in the storm tracks wind the fronts into spirals: each turns
-    // the field round its centre, most near the middle, the way the air
-    // goes round it (anticlockwise in the north). Placed by a hash, the
+    // Lows in the storm tracks wind the fronts round them (anticlockwise
+    // in the north), most near the middle. The distance to each centre is
+    // taken on a wobbled sphere, so no low is round and no two alike: a
+    // comma and a ragged arm, not a drawn spiral. Placed by a hash, the
     // same every run.
+    let wobble = [fbm3(p, 2.5, 3, 0.5, 61), fbm3(p, 2.5, 3, 0.5, 62), fbm3(p, 2.5, 3, 0.5, 63)];
+    let w = [0, 1, 2].map(|i| p[i] + 0.1 * wobble[i] as f64);
+    let length = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
+    let w = w.map(|v| v / length);
     let mut q = p;
     let mut swirl = 0.0f32;
-    for k in 0..22 {
+    for k in 0..16 {
         let unit = |salt: u32| tranquility::terrain::unit(k, 0, salt);
         let north = if k % 2 == 0 { 1.0 } else { -1.0 };
-        let (clat, clon) = ((north * (34.0 + 30.0 * unit(71))).to_radians(), unit(72) * std::f32::consts::TAU);
+        let (clat, clon) = ((north * (36.0 + 28.0 * unit(71))).to_radians(), unit(72) * std::f32::consts::TAU);
         let centre = [(clat.cos() * clon.cos()) as f64, clat.sin() as f64, (clat.cos() * clon.sin()) as f64];
-        let size = (7.0 + 9.0 * unit(73)).to_radians();
-        let cos = (p[0] * centre[0] + p[1] * centre[1] + p[2] * centre[2]).clamp(-1.0, 1.0);
+        let size = (8.0 + 10.0 * unit(73)).to_radians();
+        let cos = (w[0] * centre[0] + w[1] * centre[1] + w[2] * centre[2]).clamp(-1.0, 1.0);
         let d = cos.acos() as f32 / size;
         if d < 3.0 {
-            let w = (-d * d).exp();
-            swirl += w;
-            q = turned(q, centre, (north * (1.1 + 1.3 * unit(74)) * w) as f64);
+            let weight = (-d * d).exp();
+            swirl += weight;
+            q = turned(q, centre, (north * (0.6 + 0.7 * unit(74)) * weight) as f64);
         }
     }
     // Fronts drawn out along the latitudes and stirred.
     let s = fbm3(q, 1.1, 3, 0.5, 24) as f64 * 0.5;
     let r = [q[0] + s, q[1] * 2.2 - s, q[2] + s];
-    // Broken cells where the air rises in the tropics, sheets elsewhere.
-    let cells = fbm3(p, 9.0, 4, 0.55, 25) * bell(deg, -6.0, 12.0);
-    let field = fbm3(r, 2.6, 6, 0.55, 23) + climate + 0.08 * swirl.min(1.0) + 0.45 * cells;
-    let cloud = smoothstep(-0.03, 0.5, field);
-    c = mix(c, [0.82, 0.83, 0.85], cloud * 0.95);
+    // Broken cells where the air rises in the tropics, sheets elsewhere;
+    // edges torn finely, as cloud is seen from far off.
+    let cells = fbm3(p, 9.0, 5, 0.6, 25) * bell(deg, -6.0, 12.0);
+    let torn = fbm3(r, 22.0, 4, 0.6, 26);
+    let field = fbm3(r, 2.6, 7, 0.6, 23) + climate + 0.08 * swirl.min(1.0) + 0.45 * cells + 0.14 * torn;
+    let cover = smoothstep(-0.04, 0.24, field);
+    let thick = smoothstep(0.05, 0.5, field);
+    c = mix(c, [0.82, 0.83, 0.85], cover * (0.5 + 0.47 * thick));
     // Air: a thin blue veil.
-    mix(c, [0.25, 0.4, 0.7], 0.12)
+    mix(c, [0.25, 0.4, 0.7], 0.05)
 }
 
 /// `p` turned by `angle` (radians, right-handed) about the unit `axis`.
