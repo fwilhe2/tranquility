@@ -70,6 +70,13 @@ shutter, credits in `data/earthrise/SOURCES.md`.
 - [ ] **Ultra again**: record the short cut at ultra once more and look
       at the turn (75:48:43 to 75:48:57) frame by frame; and the streaky
       shading inside near craters in the stroll (shadow acne?).
+- [ ] **The ground through the lens** looks poured rather than struck at
+      4K. It is LOLA's relief at 1 km (Pasteur's map, from LDEM_128),
+      squeezed along the limb by the grazing view, under a high sun that
+      the soil's photometry flattens. Invented 2–8 km craters under the
+      map changed nearly nothing (tried, dropped). What would: re-cut the
+      map at 500 m or 250 m (LDEM_128 is 237 m), four or sixteen times the
+      data.
 - [ ] **Benchmark** the touring stroll and the other bodies after the
       engine changes (span, refine, sky turn). On the ground they should
       be unchanged; Hadley's look was checked against the gallery.
