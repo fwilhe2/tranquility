@@ -50,7 +50,7 @@ impl Plugin for TerrainPlugin {
             .add_systems(Startup, setup_material)
             .add_systems(
                 Update,
-                (reset.run_if(crate::world_replaced), finish_chunks, stream_chunks, cast.run_if(resource_changed::<Quality>)).chain(),
+                (reset.run_if(crate::world_replaced), finish_chunks, stream_chunks, sink, cast.run_if(resource_changed::<Quality>)).chain(),
             );
     }
 }
@@ -76,6 +76,18 @@ pub(crate) struct TerrainMaterial(pub Handle<GroundMaterial>);
 /// A chunk of ground, and the level it is on.
 #[derive(Component)]
 pub struct Chunk(pub u32);
+
+/// Where a chunk is and how high its ground goes, for the box it is culled
+/// by (see [`sink`]).
+#[derive(Component, Clone, Copy)]
+struct Extent {
+    /// North-west corner in the world, and edge, m.
+    corner: DVec2,
+    size: f64,
+    /// Lowest and highest vertex, skirts included, chunk-local.
+    low: f32,
+    high: f32,
+}
 
 /// A chunk's level and its place on that level's grid.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -363,9 +375,11 @@ fn finish_chunks(
     origin: Res<Origin>,
     material: Res<TerrainMaterial>,
     quality: Res<Quality>,
+    camera: Single<&Transform, With<Camera3d>>,
     mut meshed: MessageWriter<ChunkMeshed>,
 ) {
     let settings = &world.terrain;
+    let camera = origin.world(camera.translation);
     let chunks = &mut *chunks;
     let mut done = Vec::new();
     for (&key, task) in chunks.jobs.iter_mut() {
@@ -377,21 +391,14 @@ fn finish_chunks(
         chunks.jobs.remove(&key);
         let size = settings.size(key.level);
         let corner = key.coord.as_dvec2() * size;
-        // The curve can pull a far chunk a long way down: the box it is
-        // culled by has to reach that far, or it vanishes at the top of
-        // the screen while still in view.
-        let sink = settings.radius.map_or(0.0, |r| {
-            let far = 6.0 * size as f32 * settings.ring.max(1) as f32;
-            ground::drop_at(far, r)
-        });
-        let (lo, hi) = (built.low - sink, built.high);
-        let half = size as f32 / 2.0;
+        let extent = Extent { corner, size, low: built.low, high: built.high };
         let mut chunk = commands.spawn((
             Chunk(key.level),
             Mesh3d(meshes.add(built.mesh)),
             MeshMaterial3d(material.0.clone()),
             Transform::from_translation(origin.render(corner, 0.0)),
-            Aabb::from_min_max(Vec3::new(0.0, lo, 0.0), Vec3::new(2.0 * half, hi, 2.0 * half)),
+            extent.aabb(sunk(settings, &extent, camera)),
+            extent,
             bevy::camera::visibility::NoAutoAabb,
         ));
         if !world.terrain.casts_shadows || key.level > quality.shadow_levels() {
@@ -409,6 +416,45 @@ fn finish_chunks(
             size: size as f32,
             step: settings.step(key.level),
         });
+    }
+}
+
+impl Extent {
+    fn aabb(&self, sink: f32) -> Aabb {
+        let size = self.size as f32;
+        Aabb::from_min_max(Vec3::new(0.0, self.low - sink, 0.0), Vec3::new(size, self.high, size))
+    }
+}
+
+/// How far the curve pulls the chunk's farthest point down, seen from
+/// `camera` (world x, z), with something to spare for a frame's motion.
+fn sunk(settings: &TerrainSettings, extent: &Extent, camera: DVec2) -> f32 {
+    let Some(radius) = settings.radius else { return 0.0 };
+    let (a, b) = (extent.corner - camera, extent.corner + extent.size - camera);
+    let far = DVec2::new(a.x.abs().max(b.x.abs()), a.y.abs().max(b.y.abs())).length() as f32;
+    let drop = ground::drop_at(far.min(radius), radius);
+    drop * 1.02 + 10.0
+}
+
+/// The box a chunk is culled by reaches down as far as the curve pulls it,
+/// which depends on how far it is from the camera, not on its level: a
+/// small chunk at the horizon (as a telephoto view or the ultra tier cut
+/// them) sinks as far as a large one there. A box left at the chunk's own
+/// height sits above the ground it stands for, and when the view turns so
+/// that the box leaves the frame, ground still in the frame is culled:
+/// notches and a straight cut in the limb.
+fn sink(world: Res<WorldDef>, origin: Res<Origin>, camera: Single<&Transform, With<Camera3d>>, mut chunks: Query<(&Extent, &mut Aabb)>) {
+    if world.terrain.radius.is_none() {
+        return;
+    }
+    let at = origin.world(camera.translation);
+    for (extent, mut aabb) in &mut chunks {
+        let want = extent.aabb(sunk(&world.terrain, extent, at));
+        // Only when it changed by a metre, so a still camera leaves the
+        // boxes alone.
+        if (aabb.center.y - want.center.y).abs() > 0.5 {
+            *aabb = want;
+        }
     }
 }
 
@@ -602,6 +648,33 @@ mod tests {
 
     /// From high up the finest levels go and coarser ones come; on the
     /// ground nothing changes, and a plan of any span still tiles.
+    /// Every chunk the plan and a telephoto view want from orbit has a box
+    /// reaching down to where the curve draws all of it, however small the
+    /// chunk and however far.
+    #[test]
+    fn boxes_reach_down_to_the_curve() {
+        let moon = TerrainSettings { levels: 8, chunk_size: 64.0, radius: Some(1_737_400.0), ..Default::default() };
+        let radius = 1_737_400.0;
+        let at = DVec2::new(3.0e4, -1.0e4);
+        let span = moon.span(112_000.0);
+        let mut wanted = plan(&moon, at, span);
+        let forward = Vec3::new(-0.95, -0.3, 0.0).normalize();
+        refine(&mut wanted, &moon, &View { at, height: 112_000.0, forward, fov: 12.8f32.to_radians(), aspect: 1.0, detail: 2.0 });
+        let mut checked = 0;
+        for key in wanted {
+            let size = moon.size(key.level);
+            let extent = Extent { corner: key.coord.as_dvec2() * size, size, low: 0.0, high: 100.0 };
+            let aabb = extent.aabb(sunk(&moon, &extent, at));
+            for (u, v) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0), (0.5, 0.5)] {
+                let p = extent.corner + DVec2::new(u, v) * size - at;
+                let drop = ground::drop_at((p.length() as f32).min(radius), radius);
+                assert!(aabb.min().y <= -drop, "{key:?} sinks {drop} m, its box {}", aabb.min().y);
+            }
+            checked += 1;
+        }
+        assert!(checked > 100, "{checked}");
+    }
+
     #[test]
     fn span_follows_the_eye() {
         let moon = TerrainSettings { levels: 8, chunk_size: 64.0, radius: Some(1_737_400.0), ..Default::default() };
