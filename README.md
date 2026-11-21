@@ -229,8 +229,19 @@ through). `make video QUALITY=medium` asks less of each frame.
 
 ### Ultra: the best picture, on a fast GPU
 
-`TRANQUILITY_QUALITY=ultra` is a tier for recordings only (nothing picks
-it for you and **Q** never reaches it). Compared with High:
+Ultra is a tier for a fast GPU: for recordings, and live if the GPU
+keeps up. Nothing picks it for you; ask for it with `--ultra` (or
+`--quality=ultra`, or `TRANQUILITY_QUALITY=ultra`):
+
+```sh
+make ultra                                 # walk the Moon live at ultra
+target/release/moon mars --ultra           # any body or site, the same
+make watch-earthrise CUT=long QUALITY=ultra   # the Earthrise film, live
+make stroll QUALITY=ultra                  # the tour, live
+```
+
+Started at ultra, **Q** goes round ultra, high, medium, low; otherwise it
+never reaches ultra. Compared with High:
 
 - the sun's shadow maps are 8192² (four cascades, out to 6 km), and two
   more levels of the ground cast shadows, so distant crater rims shade
@@ -243,6 +254,11 @@ it for you and **Q** never reaches it). Compared with High:
 - the recorder draws every frame at twice the size each way and scales it
   down with Lanczos (four samples a pixel), and encodes at CRF 12 with
   x264's slower preset.
+
+Every recording (any tier) holds its clock while the ground it looks at
+is still streaming in, so the finer ground never shows a chunk late,
+however fast the 250 mm lens swings; it only takes longer. Live, the
+ground streams in as fast as the CPU meshes it.
 
 ```sh
 make earthrise CUT=long QUALITY=ultra                  # 1920×1080, drawn at 3840×2160

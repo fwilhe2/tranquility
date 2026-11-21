@@ -3,6 +3,7 @@
 #
 # Native:  make run APP=moon        (debug, fast to rebuild)
 #          make release APP=moon    (optimised binary in target/release/)
+#          make ultra APP=moon      (optimised, at the ultra tier: a fast GPU)
 # Browser: make web APP=moon        (WebGPU build in dist/moon/)
 #          make serve APP=moon      (build, then serve it on http://localhost:8000)
 #
@@ -16,6 +17,7 @@
 #                                 earthrise-short.mp4 (about 2 min) or
 #                                 earthrise-long.mp4 (about 5 min), recorded
 # make watch-earthrise [CUT=…]    the same film live, with sound
+#                                 (QUALITY=ultra here, or for make stroll, too)
 #                                 QUALITY=ultra (and SIZE=3840x2160) for the best picture
 #                                 on a fast GPU: README, "Ultra"
 
@@ -27,7 +29,7 @@ SIZE ?= 1920x1080
 QUALITY ?= high
 CUT ?= short
 
-.PHONY: run release web serve shot stroll video gallery earthrise watch-earthrise check clean
+.PHONY: run release ultra web serve shot stroll video gallery earthrise watch-earthrise check clean
 
 # wasm-bindgen's CLI must match the crate version in Cargo.lock exactly, so a
 # matching copy is installed into .tools/ instead of relying on a global one.
@@ -46,6 +48,13 @@ run:
 release:
 	cargo build --release -p $(APP)
 
+ultra:
+	cargo build --release -p $(APP)
+	target/release/$(APP) --ultra
+
+# The tier for the live targets, only when asked for on the command line.
+LIVE_QUALITY = $(if $(filter command line environment,$(origin QUALITY)),--quality=$(QUALITY))
+
 check:
 	cargo clippy --workspace
 	cargo test --workspace
@@ -60,7 +69,7 @@ gallery:
 
 stroll:
 	cargo build --release -p moon
-	MOON_STROLL=tour target/release/moon
+	MOON_STROLL=tour target/release/moon $(LIVE_QUALITY)
 
 earthrise:
 	cargo build --release -p moon
@@ -68,7 +77,7 @@ earthrise:
 
 watch-earthrise:
 	cargo build --release -p moon
-	MOON_EARTHRISE=film,$(CUT) target/release/moon
+	MOON_EARTHRISE=film,$(CUT) target/release/moon $(LIVE_QUALITY)
 
 video:
 	cargo build --release -p moon

@@ -1,8 +1,10 @@
 //! Quality tiers: what the frame costs on the GPU. `Q` cycles them live.
 //!
-//! - `TRANQUILITY_QUALITY=ultra|high|medium|low` picks the starting tier.
-//!   Ultra is never chosen for you and `Q` never cycles into it: it is for
-//!   recording on a fast GPU, where a frame may take what it needs.
+//! - `TRANQUILITY_QUALITY=ultra|high|medium|low` picks the starting tier,
+//!   and so does `--ultra` (or `--quality=high`, …) on the command line.
+//!   Ultra is never chosen for you: it is for a fast GPU, and for
+//!   recording, where a frame may take what it needs. Started at ultra,
+//!   `Q` cycles through it too; otherwise it never goes there.
 //! - `TRANQUILITY_OFF=ssao,taa,bloom,motionblur,shadows,softshadow,far` switches single features off on
 //!   top of the tier, for measuring what each costs.
 
@@ -31,13 +33,43 @@ pub enum Quality {
     Low,
 }
 
+/// The best tier `Q` goes to: High, or Ultra when the run started there.
+#[derive(Resource, Clone, Copy)]
+struct Best(Quality);
+
 impl Quality {
-    fn next(self) -> Self {
+    fn next(self, best: Quality) -> Self {
         match self {
-            Quality::Ultra | Quality::High => Quality::Medium,
+            Quality::Ultra => Quality::High,
+            Quality::High => Quality::Medium,
             Quality::Medium => Quality::Low,
-            Quality::Low => Quality::High,
+            Quality::Low => best,
         }
+    }
+
+    fn named(name: &str) -> Option<Self> {
+        match name.trim() {
+            "ultra" => Some(Quality::Ultra),
+            "high" => Some(Quality::High),
+            "medium" => Some(Quality::Medium),
+            "low" => Some(Quality::Low),
+            _ => None,
+        }
+    }
+
+    /// The tier asked for: `--ultra` or `--quality=…` on the command line,
+    /// else `TRANQUILITY_QUALITY`.
+    pub(crate) fn asked() -> Option<Self> {
+        #[cfg(not(target_arch = "wasm32"))]
+        for arg in std::env::args().skip(1) {
+            if arg == "--ultra" {
+                return Some(Quality::Ultra);
+            }
+            if let Some(q) = arg.strip_prefix("--quality=").and_then(Quality::named) {
+                return Some(q);
+            }
+        }
+        std::env::var("TRANQUILITY_QUALITY").ok().as_deref().and_then(Quality::named)
     }
 
     /// How much finer than usual the ground in view is cut: the chunks in
@@ -87,24 +119,22 @@ pub struct QualityPlugin;
 
 impl Plugin for QualityPlugin {
     fn build(&self, app: &mut App) {
-        let start = match std::env::var("TRANQUILITY_QUALITY").as_deref() {
-            Ok("ultra") => Quality::Ultra,
-            Ok("low") => Quality::Low,
-            Ok("medium") => Quality::Medium,
-            Ok("high") => Quality::High,
+        let start = match Quality::asked() {
+            Some(q) => q,
             // A recording has all the time it needs.
             #[cfg(not(target_arch = "wasm32"))]
             _ if crate::record::recording() => Quality::High,
             // Medium holds ~30 fps on a small discrete GPU; Q goes up.
             _ => Quality::Medium,
         };
-        app.insert_resource(start).add_systems(Update, (cycle, apply).chain());
+        let best = if start == Quality::Ultra { Quality::Ultra } else { Quality::High };
+        app.insert_resource(start).insert_resource(Best(best)).add_systems(Update, (cycle, apply).chain());
     }
 }
 
-fn cycle(keys: Res<ButtonInput<KeyCode>>, mut quality: ResMut<Quality>) {
+fn cycle(keys: Res<ButtonInput<KeyCode>>, best: Res<Best>, mut quality: ResMut<Quality>) {
     if keys.just_pressed(KeyCode::KeyQ) {
-        *quality = quality.next();
+        *quality = quality.next(best.0);
     }
 }
 
@@ -177,5 +207,27 @@ fn apply(
     }
     for mut light in &mut light_settings {
         light.shadow_maps_enabled = !off("shadows");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Q goes round every tier up to the best and never past it.
+    #[test]
+    fn q_reaches_ultra_only_from_it() {
+        let round = |best: Quality| {
+            let mut seen = vec![best];
+            let mut q = best.next(best);
+            while q != best {
+                seen.push(q);
+                q = q.next(best);
+            }
+            seen
+        };
+        assert_eq!(round(Quality::Ultra), [Quality::Ultra, Quality::High, Quality::Medium, Quality::Low]);
+        assert_eq!(round(Quality::High), [Quality::High, Quality::Medium, Quality::Low]);
+        assert_eq!(Quality::named(" ultra"), Some(Quality::Ultra));
     }
 }

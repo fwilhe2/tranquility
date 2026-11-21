@@ -25,7 +25,7 @@
 //! twice the size each way and has `ffmpeg` scale it down (Lanczos): four
 //! samples a pixel, edges and fine ground without shimmer.
 //! `TRANQUILITY_RECORD_CRF` sets the encoder's quality (lower is better:
-//! 16 by default, 0 lossless). `TRANQUILITY_QUALITY=ultra` makes the
+//! 16 by default, 0 lossless). Ultra (`--ultra`) makes the
 //! defaults 2 and 12, with x264's slower preset. The drawn frame may be
 //! at most 8192 pixels each way.
 
@@ -115,7 +115,7 @@ pub(crate) fn add(app: &mut App) {
         .ok()
         .and_then(|s| s.split_once('x').and_then(|(w, h)| Some(UVec2::new(w.trim().parse().ok()?, h.trim().parse().ok()?))))
         .unwrap_or(UVec2::new(1920, 1080));
-    let ultra = std::env::var("TRANQUILITY_QUALITY").is_ok_and(|q| q == "ultra");
+    let ultra = crate::quality::Quality::asked() == Some(crate::quality::Quality::Ultra);
     let wanted = std::env::var("TRANQUILITY_SUPERSAMPLE").ok().and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(if ultra { 2 } else { 1 }).max(1);
     // As much as fits in the largest texture a GPU is sure to allow.
     let factor = (1..=wanted).rev().find(|f| size.x * f <= 8192 && size.y * f <= 8192).unwrap_or(1);

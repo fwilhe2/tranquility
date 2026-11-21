@@ -59,7 +59,7 @@ fn main() {
     // A body or a site by name, as the first argument or in
     // TRANQUILITY_BODY / TRANQUILITY_SITE: `mars`, `gale`; a site picks
     // its body. TRANQUILITY_SITE=invented walks the body's own ground.
-    let arg = std::env::args().nth(1);
+    let arg = std::env::args().skip(1).find(|a| !a.starts_with("--"));
     let site_name = options::get("TRANQUILITY_SITE").or_else(|| arg.clone());
     let site = site_name.as_deref().and_then(sites::by_id);
     let wanted = site.map(|s| s.body.to_string()).or(arg).or_else(|| options::get("TRANQUILITY_BODY"));
