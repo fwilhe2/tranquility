@@ -163,7 +163,8 @@ pub fn plan(settings: &TerrainSettings, camera: DVec2, (finest, coarsest): (u32,
 /// ground a grid step of about a 200th of its distance, right for the
 /// usual 70°; a telephoto view magnifies that, so chunks in its frustum
 /// are split until their step is as small, to its scale, as the plan's is
-/// to 70°'s. Nothing is split for a view of 70° or more.
+/// to 70°'s. Nothing is split for a view of 70° or more, unless the
+/// quality tier asks for finer ground everywhere in view (`detail`).
 #[derive(Clone, Copy, Debug)]
 pub struct View {
     pub at: DVec2,
@@ -172,6 +173,9 @@ pub struct View {
     /// Vertical field of view and width over height.
     pub fov: f32,
     pub aspect: f32,
+    /// How many times finer than the plan's the ground in view should be
+    /// cut, beyond what the field asks (`Quality::detail`): 1 usually.
+    pub detail: f32,
 }
 
 /// The field of view the plan's levels are made for, radians.
@@ -183,7 +187,7 @@ impl View {
     /// The view, coarsely, for knowing when to plan again: the direction to
     /// two degrees and the field to a tenth of a degree.
     fn key(&self) -> Option<IVec4> {
-        if self.fov >= USUAL_FOV * 0.98 {
+        if self.fov >= USUAL_FOV * 0.98 && self.detail <= 1.0 {
             return None;
         }
         let q = |v: f32| (v * 28.6).round() as i32;
@@ -195,10 +199,10 @@ impl View {
 /// is fine enough for it (see [`View`]). Chunks keep tiling the ground
 /// exactly once: a chunk is replaced by its four quarters.
 pub fn refine(wanted: &mut HashSet<Key>, settings: &TerrainSettings, view: &View) {
-    if view.fov >= USUAL_FOV * 0.98 {
+    if view.fov >= USUAL_FOV * 0.98 && view.detail <= 1.0 {
         return;
     }
-    let limit = STEP_OVER_DISTANCE * view.fov / USUAL_FOV;
+    let limit = STEP_OVER_DISTANCE * view.fov.min(USUAL_FOV) / USUAL_FOV / view.detail.max(1.0);
     // Half the diagonal field, for a cone round the view.
     let half = ((view.fov / 2.0).tan() * (1.0 + view.aspect * view.aspect).sqrt()).atan();
     let radius = settings.radius;
@@ -275,6 +279,7 @@ fn stream_chunks(
     origin: Res<Origin>,
     camera: Single<(&Transform, &mut Projection), With<Camera3d>>,
     window: Option<Single<&Window>>,
+    quality: Option<Res<crate::quality::Quality>>,
     mesh_handles: Query<&Mesh3d, With<Chunk>>,
 ) {
     let settings = &world.terrain;
@@ -289,7 +294,8 @@ fn stream_chunks(
         _ => USUAL_FOV,
     };
     let aspect = window.map_or(16.0 / 9.0, |w| w.width() / w.height().max(1.0));
-    let view = View { at, height, forward: *camera.forward(), fov, aspect };
+    let detail = quality.map_or(1.0, |q| q.detail());
+    let view = View { at, height, forward: *camera.forward(), fov, aspect, detail };
     let chunks = &mut *chunks;
     if chunks.planned_for != Some((span, here, view.key())) {
         chunks.wanted = plan(settings, at, span);
@@ -560,10 +566,10 @@ mod tests {
         let base = plan(&moon, at, span);
         let forward = Vec3::new(-0.95, -0.3, 0.0).normalize();
         let mut wide = base.clone();
-        refine(&mut wide, &moon, &View { at, height: 112_000.0, forward, fov: 70f32.to_radians(), aspect: 1.5 });
+        refine(&mut wide, &moon, &View { at, height: 112_000.0, forward, fov: 70f32.to_radians(), aspect: 1.5, detail: 1.0 });
         assert_eq!(wide, base);
         let mut narrow = base.clone();
-        refine(&mut narrow, &moon, &View { at, height: 112_000.0, forward, fov: 12.8f32.to_radians(), aspect: 1.0 });
+        refine(&mut narrow, &moon, &View { at, height: 112_000.0, forward, fov: 12.8f32.to_radians(), aspect: 1.0, detail: 1.0 });
         assert!(narrow.len() > base.len());
         // Finer ground ahead (west), none behind: the level of the chunk
         // holding a point 375 km off either way.
